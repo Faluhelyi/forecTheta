@@ -8,7 +8,7 @@
 }
 \description{
 	In this package we implement functions for forecast univariate time series using the several Theta Models (Fiorucci et al, 2015 and 2016) and
-	the Standard Theta Method of Assimakopoulos \& Nikolopoulos (2000).
+	the Standard Theta Method of Assimakopoulos & Nikolopoulos (2000).
 	Moreover, it is including a function for compute the main errors metrics used in time series forecasting and a function for compute the
 	Generalised Rolling Origin Evaluation, which contain as particular cases the Rolling Origin Evaluation and the Fixed Origin Evaluation of Tashman (2000).
 	%%~~ A concise (1-5 lines) description of the package ~~
@@ -17,8 +17,8 @@
 	\tabular{ll}{
 		Package: \tab forecTheta\cr
 		Type: \tab Package\cr
-		Version: \tab 2.6.0\cr
-		Date: \tab 2019-02-17\cr
+		Version: \tab 2.6.1\cr
+		Date: \tab 2022-11-05\cr
 		License: \tab GPL (>=2.0) \cr
 	}
 
@@ -39,10 +39,9 @@
 	%%~~ The author and/or maintainer of the package ~~
 }
 \references{
-	Fiorucci J.A., Pellegrini T.R., Louzada F., Petropoulos F., Koehler, A. (2016). \emph{Models for optimising the theta method and their relationship to state space models},
-	International Journal of Forecasting , 32 (4), 1151--1161. \url{https://www.sciencedirect.com/science/article/pii/S0169207016300243}.
+	Fiorucci J.A., Pellegrini T.R., Louzada F., Petropoulos F., Koehler, A. (2016). \emph{Models for optimising the theta method and their relationship to state space models},	International Journal of Forecasting, 32 (4), 1151--1161.
 
-	Fiorucci J.A., Pellegrini T.R., Louzada F., Petropoulos F. (2015). \emph{The Optimised Theta Method}. Free available at \url{ http://arxiv.org/abs/1503.03529 }.
+	Fioruci J.A., Pellegrini T.R., Louzada F., Petropoulos F. (2015). \emph{The Optimised Theta Method}. arXiv preprint, arXiv:1503.03529.
 
 	Assimakopoulos, V. and Nikolopoulos k. (2000). \emph{The theta model: a decomposition approach to forecasting}. International Journal of Forecasting 16, 4, 521--530.
 
