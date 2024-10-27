@@ -1,4 +1,5 @@
-**forecTheta**
+**forecTheta**: The R package for forecasting time series by Theta Models
+
 
 Functions for forecast univariate time series using the Dynamic Optimised Theta Model, Dynamic Standard Theta Model,
 Optimised Theta Model and Standard Theta Model (Fiorucci et al, 2016).
