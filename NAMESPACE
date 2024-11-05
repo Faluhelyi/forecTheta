@@ -6,9 +6,9 @@ importFrom("graphics", "legend", "plot", "points", "polygon")
 
 importFrom("parallel","mclapply")
 
-importFrom("forecast","snaive")
+importFrom("forecast","snaive", "mstl")
 
-importFrom("tseries","terasvirta.test")
+importFrom("tseries","terasvirta.test", "kpss.test")
 
 export(dotm, dstm, otm, stm, expSmoot, otm.arxiv, stheta, plot.thetaModel, groe, fixOrig, rolOrig,  errorMetric)
 

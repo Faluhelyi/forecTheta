@@ -1,3 +1,8 @@
+
+Version 2.7.1 (05 Nov 2024)
+  * included option of STL decomposition for seasonal time series
+  * included option for check unit root before seasonal test
+
 Version 2.6 (11 Nov 2022)
 	* fixed a problem in BugReports
 	* included github page
