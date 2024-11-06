@@ -18,20 +18,24 @@
 }
 \usage{
 	dotm(y, h=5, level=c(80,90,95), s_type="multiplicative", s_test="default",
-	par_ini=c(y[1]/2, 0.5, 2),	estimation=TRUE, lower=c(-1e+10, 0.1, 1.0),
-	upper=c(1e+10, 0.99, 1e+10), opt.method="Nelder-Mead", xreg=NULL)
+	lambda=NULL, par_ini=c(y[1]/2, 0.5, 2),	estimation=TRUE,
+	lower=c(-1e+10, 0.1, 1.0),upper=c(1e+10, 0.99, 1e+10),
+	opt.method="Nelder-Mead", xreg=NULL)
 
 	dstm(y, h=5, level=c(80,90,95), s_type="multiplicative", s_test="default",
-	par_ini=c(y[1]/2, 0.5), estimation=TRUE, lower=c(-1e+10, 0.1),
-	upper=c(1e+10, 0.99), opt.method="Nelder-Mead", xreg=NULL)
+	lambda=NULL, par_ini=c(y[1]/2, 0.5), estimation=TRUE,
+	lower=c(-1e+10, 0.1), upper=c(1e+10, 0.99),
+	opt.method="Nelder-Mead", xreg=NULL)
 
 	otm(y, h=5, level=c(80,90,95), s_type="multiplicative", s_test="default",
-	par_ini=c(y[1]/2, 0.5, 2), estimation=TRUE, lower=c(-1e+10, 0.1, 1.0),
-	upper=c(1e+10, 0.99, 1e+10), opt.method="Nelder-Mead", xreg=NULL)
+	lambda=NULL, par_ini=c(y[1]/2, 0.5, 2), estimation=TRUE,
+	lower=c(-1e+10, 0.1, 1.0), upper=c(1e+10, 0.99, 1e+10),
+	opt.method="Nelder-Mead", xreg=NULL)
 
 	stm(y, h=5, level=c(80,90,95), s_type="multiplicative", s_test="default",
-	par_ini=c(y[1]/2, 0.5), estimation=TRUE, lower=c(-1e+10, 0.1),
-	upper=c(1e+10, 0.99), opt.method="Nelder-Mead", xreg=NULL)
+	lambda=NULL, par_ini=c(y[1]/2, 0.5), estimation=TRUE,
+	lower=c(-1e+10, 0.1), upper=c(1e+10, 0.99),
+	opt.method="Nelder-Mead", xreg=NULL)
 
 	stheta(y, h=5, s_type="multiplicative", s_test="default")
 }
@@ -56,6 +60,12 @@
 		If \code{FALSE}, seasonal decomposition is not used.
 		If \code{default}, the time series is tested for statistically seasonal behaviour.
 		If \code{uni_root}, then first a difference is taken if a unit root is detected.
+	}
+	\item{lambda}{
+	Parameter for Box-Cox transformation (\code{forecast::BoxCox} is considered).
+	If \code{lambda=NULL}, then it is ignored.
+	If \code{lambda="auto"}, then this parameter is automatically selected (see \code{forecast::BoxCox.lambda()}).
+	Furthermore, \code{lambda=0} corresponds to the logarithmic transformation, which can be used to get strictly positive forecasts.
 	}
 	\item{par_ini}{
 		Vector of initialization for \code{(ell, alpha, theta)} parameters.

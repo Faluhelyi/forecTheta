@@ -6,7 +6,7 @@ importFrom("graphics", "legend", "plot", "points", "polygon")
 
 importFrom("parallel","mclapply")
 
-importFrom("forecast","snaive", "mstl")
+importFrom("forecast","snaive", "mstl", "BoxCox.lambda", "BoxCox", "InvBoxCox")
 
 importFrom("tseries","terasvirta.test", "kpss.test")
 

@@ -54,7 +54,12 @@ seasonal_test = function(y, s_test = c("default","unit_root")){
 ## s_type = c("additive","multiplicative","stl")
 ## s_test = c("default","unit_root",TRUE, FALSE)
 
-twoTL <- function(y, h, level, s_type, s_test, par_ini, estimation, lower, upper, opt.method, dynamic, xreg=NULL){
+twoTL <- function(y, h, level,
+                  s_type, ## s_type = c("additive","multiplicative","stl")
+                  s_test, ## s_test = c("default","unit_root",TRUE, FALSE)
+                  par_ini, estimation, lower, upper, opt.method, dynamic, xreg=NULL,
+                  lambda=NULL) ## parameter of Box-Cox transformation
+  {
 
 	if(!is.ts(y)){ stop("ERROR in twoTL function: y must be an object of time series class."); }
 	if(!is.numeric(h)){	stop("ERROR in twoTL function: h must be a positive integer number.");}
@@ -63,6 +68,13 @@ twoTL <- function(y, h, level, s_type, s_test, par_ini, estimation, lower, upper
 	n = length(y)
 	fq = frequency(y)
 	time_y = time(y)
+
+	if(!is.null(lambda)){
+	  if(lambda == "auto"){
+	    lambda = BoxCox.lambda(y, lower=0, upper=1)
+	  }
+	  y = BoxCox(y, lambda)
+	}
 
 	if(!is.null(xreg)){
 
@@ -280,6 +292,14 @@ twoTL <- function(y, h, level, s_type, s_test, par_ini, estimation, lower, upper
 		Y_residuals = y - Y_fitted
 	}
 
+	if(!is.null(lambda)){
+	  y = InvBoxCox(y, lambda)
+	  Y_fcast = InvBoxCox(Y_fcast, lambda)
+	  if(!is.null(level)){
+	    quantiles = InvBoxCox(quantiles, lambda)
+	  }
+	}
+
 	out = list()
 	out$method = "Two Theta Lines Model"
 	out$y = y
@@ -287,6 +307,7 @@ twoTL <- function(y, h, level, s_type, s_test, par_ini, estimation, lower, upper
 	out$s_test = s_test
 	out$opt.method = ifelse(estimation, opt.method, 'none')
 	out$par = matrix(par, ncol=1)
+	out$lambda = lambda
 	if(is.null(xreg)){
 		rownames(out$par) = c('ell0','alpha','theta')
 	}else{
@@ -318,12 +339,13 @@ twoTL <- function(y, h, level, s_type, s_test, par_ini, estimation, lower, upper
 
 
 dotm <- function(y, h=5, level=c(80,90,95), s_type="multiplicative", s_test="default",
-                 par_ini=c(y[1]/2, 0.5, 2), estimation=TRUE, lower=c(-1e+10, 0.1, 1.0),
-	               upper=c(1e+10, 0.99, 1e+10), opt.method="Nelder-Mead", xreg=NULL ){
+                 lambda=NULL, par_ini=c(y[1]/2, 0.5, 2), estimation=TRUE,
+                 lower=c(-1e+10, 0.1, 1.0), upper=c(1e+10, 0.99, 1e+10),
+                 opt.method="Nelder-Mead", xreg=NULL ){
 
 	out = twoTL(y=y, h=h, level=level, s_type=s_type, s_test=s_test, par_ini=par_ini,
 	            estimation=estimation, lower=lower, upper=upper, opt.method=opt.method,
-	            dynamic=TRUE, xreg=xreg)
+	            dynamic=TRUE, xreg=xreg, lambda=lambda)
 
 	out$method = "Dynamic Optimised Theta Model"
 
@@ -331,12 +353,13 @@ dotm <- function(y, h=5, level=c(80,90,95), s_type="multiplicative", s_test="def
 }
 
 dstm <- function(y, h=5, level=c(80,90,95), s_type="multiplicative", s_test="default",
-                 par_ini=c(y[1]/2, 0.5),estimation=TRUE, lower=c(-1e+10, 0.1),
-                 upper=c(1e+10, 0.99), opt.method="Nelder-Mead", xreg=NULL){
+                 lambda=NULL, par_ini=c(y[1]/2, 0.5),estimation=TRUE,
+                 lower=c(-1e+10, 0.1), upper=c(1e+10, 0.99),
+                 opt.method="Nelder-Mead", xreg=NULL){
 
 	out = twoTL(y=y, h=h, level=level, s_type=s_type, s_test=s_test, par_ini=c(par_ini,2.0),
 	            estimation=estimation, lower=c(lower, 1.99999), upper=c(upper, 2.00001),
-		          opt.method=opt.method, dynamic=TRUE, xreg=xreg)
+		          opt.method=opt.method, dynamic=TRUE, xreg=xreg, lambda=lambda)
 	out$method = "Dynamic Standard Theta Model"
 	out$par = as.matrix(out$par[c('ell0','alpha'),])
 	colnames(out$par) = 'MLE'
@@ -345,24 +368,27 @@ dstm <- function(y, h=5, level=c(80,90,95), s_type="multiplicative", s_test="def
 
 
 otm <- function(y, h=5, level=c(80,90,95), s_type="multiplicative", s_test="default",
-                par_ini=c(y[1]/2, 0.5, 2.0),
-	estimation=TRUE, lower=c(-1e+10, 0.1, 1.0),
-	upper=c(1e+10, 0.99, 1e+10), opt.method="Nelder-Mead", xreg=NULL){
+                lambda=NULL, par_ini=c(y[1]/2, 0.5, 2.0), estimation=TRUE,
+                lower=c(-1e+10, 0.1, 1.0), upper=c(1e+10, 0.99, 1e+10),
+                opt.method="Nelder-Mead", xreg=NULL){
 
 	out = twoTL(y=y, h=h, level=level, s_type=s_type, s_test=s_test,
 	            par_ini=par_ini, estimation=estimation, lower=lower,
-		          upper=upper, opt.method=opt.method, dynamic=FALSE, xreg=xreg)
+		          upper=upper, opt.method=opt.method, dynamic=FALSE, xreg=xreg,
+		          lambda=lambda)
 	out$method = "Optimised Theta Model"
 	return(out)
 }
 
 stm <- function(y, h=5, level=c(80,90,95), s_type="multiplicative", s_test="default",
-                par_ini=c(y[1]/2, 0.5), estimation=TRUE,
-	lower=c(-1e+10, 0.1), upper=c(1e+10, 0.99), opt.method="Nelder-Mead", xreg=NULL){
+                lambda=NULL, par_ini=c(y[1]/2, 0.5), estimation=TRUE,
+	              lower=c(-1e+10, 0.1), upper=c(1e+10, 0.99),
+                opt.method="Nelder-Mead", xreg=NULL){
 
 	out = twoTL(y=y, h=h, level=level, s_type=s_type, s_test=s_test,
-	            par_ini=c(par_ini,2.0), estimation=estimation, lower=c(lower,1.99999),
-		upper=c(upper,2.00001), opt.method=opt.method, dynamic=FALSE, xreg=xreg)
+	            par_ini=c(par_ini,2.0), estimation=estimation,
+	            lower=c(lower,1.99999), upper=c(upper,2.00001),
+	            opt.method=opt.method, dynamic=FALSE, xreg=xreg, lambda=lambda)
 
 	out$method = "Standard Theta Model"
 	out$par = as.matrix(out$par[c('ell0','alpha'),])
@@ -622,6 +648,10 @@ print.thetaModel <- function(x,...){
 	cat("\nEstimative of parameters:\n")
 	print(round(x$par,2))
 
+	if( !is.null(x$lambda) ){
+	  cat("\nBoxCox transformation: lambda =", round(x$lambda,2), "\n")
+	}
+
 	if(!is.null(x$lower)&&!is.null(x$upper)){
 		cat("\nForecasting points and prediction intervals\n")
 		mm = cbind(x$mean,x$lower,x$upper)
@@ -654,6 +684,8 @@ summary.thetaModel <- function(object,...){
 	out$opt.method = object$opt.method
 
 	out$par = object$par
+
+	out$lambda = object$lambda
 
 	if(!is.null(object$lower)&&!is.null(object$upper)){
 		mm = cbind(object$mean,object$lower,object$upper)
@@ -699,6 +731,10 @@ print.summ <- function(x,...){
 
 	cat("Estimative of parameters:\n")
 	print(round(x$par,2))
+
+	if( !is.null(x$lambda) ){
+	  cat("\nBoxCox transformation: lambda =", round(x$lambda,2), "\n")
+	}
 
 	cat("\nForecasting points and prediction intervals\n")
 	print(x$statistics)

@@ -1,4 +1,7 @@
 
+Version 2.7.2 (06 Nov 2024)
+  * included BoxCox transformation
+
 Version 2.7.1 (05 Nov 2024)
   * included STL decomposition for seasonal time series
   * included option for check unit root before seasonal test
