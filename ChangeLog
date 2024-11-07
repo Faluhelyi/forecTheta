@@ -1,4 +1,7 @@
 
+Version 2.7.3 (07/11/2024)
+  * included bagging
+
 Version 2.7.2 (06 Nov 2024)
   * included BoxCox transformation
 
@@ -20,7 +23,6 @@ Version 2.4 (17 Feb 2019)
 Version 2.3 (31 May 2016)
 	* plot.thetaModel() improved;
 
-
 Version 2.2 (25 May 2016)
    * fixed a problem in stheta() function when s=F (Thanks Oleh Komashko);
    * fixed a problem in otm() function with par_ini argument different of default;
@@ -34,7 +36,6 @@ Version 2.1 (07 Mar 2016)
    * improved documentation;
    * fixed a problem with thetaModel class;
 
-
 Version 2.0 (29 Feb 2016)
    * included the models: dotm, dstm, otm, stm, stheta, expSmoot;
    * included the class thetaModel;
@@ -42,10 +43,8 @@ Version 2.0 (29 Feb 2016)
    * the old otm() function was renamed to otm.arxiv();
    * the thetaM() function was replaced by stheta() for equivalence with IJF paper;
 
-
 Version 1.1 (31 Jul 2015)
    * NAMESPACE updated;
    * otm() updated;
-
 
 Version 1.0 (15 Apr 2015)
