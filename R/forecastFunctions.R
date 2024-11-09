@@ -58,8 +58,8 @@ twoTL <- function(y, h, level,
                   s_type, ## s_type = c("additive","multiplicative","stl")
                   s_test, ## s_test = c("default","unit_root",TRUE, FALSE)
                   par_ini, estimation, lower, upper, opt.method, dynamic, xreg=NULL,
-                  lambda=NULL,   ## parameter of Box-Cox transformation
-                  run_bagging=FALSE  ## return de "matForec.sample" if TRUE.
+                  lambda=NULL   ## parameter of Box-Cox transformation
+                  #, run_bagging=TRUE  ## return de "matForec.sample" if TRUE.
                   )
   {
 
@@ -264,10 +264,8 @@ twoTL <- function(y, h, level,
 		quantiles = t( apply(X=matForec.sample, MARGIN=2, FUN=quantile, probs=probs) )
 
 		## included in version 2.7.3, it's used to compute bagging forecasts
-		if(run_bagging){
-		  matForec.sample = ts( t( matForec.sample ), start = end(y) + c(0, 1), frequency = frequency(y) )
-		  colnames( matForec.sample ) = paste0( "sample", 1:ncol(matForec.sample) )
-		}
+	  matForec.sample = ts( t( matForec.sample ), start = end(y) + c(0, 1), frequency = frequency(y) )
+	  colnames( matForec.sample ) = paste0( "sample", 1:ncol(matForec.sample) )
 		##
 
 		if(!is.null(xreg)){
@@ -275,8 +273,7 @@ twoTL <- function(y, h, level,
 			y_reg  = as.numeric(xreg[-(1:n),] %*% reg)
 			quantiles = quantiles + y_reg
 
-			if(run_bagging){ matForec.sample = matForec.sample + y_reg; }
-
+			matForec.sample = matForec.sample + y_reg;
 		}
 		quantiles = ts( quantiles, start = end(y) + c(0, 1), frequency = frequency(y))
 		colnames(quantiles) = unlist( lapply(X=1:nn, FUN=function(X) paste(c('Lo','Hi'), level[X]) ) )
@@ -289,30 +286,28 @@ twoTL <- function(y, h, level,
 			s_forec = snaive(y_decomp, h = h)$mean
 			Y_fcast =  s_forec * Y_fcast
 			if(!is.null(level)){
-				for(i in 1:ncol(quantiles)){
-					quantiles[,i] = quantiles[,i] * s_forec
-				}
-			  if(run_bagging){
-			    for(i in 1:row(matForec.sample)){
-			      matForec.sample[,i] = matForec.sample[,i] * s_forec
-			    }
-			  }
+				# for(i in 1:ncol(quantiles)){
+				# 	quantiles[,i] = quantiles[,i] * s_forec
+				# }
+			  quantiles = quantiles * replicate( ncol(quantiles), s_forec )
+
+			  matForec.sample = matForec.sample * replicate( ncol(matForec.sample), s_forec )
 			}
+
 		}else{
 			y = y + y_decomp
 			Y_fitted = y_decomp + Y_fitted
 			s_forec = snaive(y_decomp, h = h)$mean
 			Y_fcast =  s_forec + Y_fcast
 			if(!is.null(level)){
-				for(i in 1:ncol(quantiles)){
-					quantiles[,i] = quantiles[,i] + s_forec
-				}
-			  if(run_bagging){
-			    for(i in 1:row(matForec.sample)){
-			      matForec.sample[i,] = matForec.sample[i,] + s_forec
-			    }
-			  }
+				# for(i in 1:ncol(quantiles)){
+				# 	quantiles[,i] = quantiles[,i] + s_forec
+				# }
+			  quantiles = quantiles + replicate( ncol(quantiles), s_forec )
+
+			  matForec.sample = matForec.sample + replicate( ncol(matForec.sample), s_forec )
 			}
+
 		}
 
 		Y_residuals = y - Y_fitted
@@ -323,7 +318,9 @@ twoTL <- function(y, h, level,
 	  Y_fcast = InvBoxCox(Y_fcast, lambda)
 	  if(!is.null(level)){
 	    quantiles = InvBoxCox(quantiles, lambda)
-	    if(run_bagging){ matForec.sample =  InvBoxCox(matForec.sample, lambda); }
+	    #if(run_bagging){
+	      matForec.sample =  InvBoxCox(matForec.sample, lambda);
+	     # }
 	  }
 	}
 
@@ -357,7 +354,6 @@ twoTL <- function(y, h, level,
 		out$lower = out$upper = NULL
 	}
   out$matForec.sample = matForec.sample
-
 	out$tests = matrix(c(tnnTest.pvalue,shapTest.pvalue),nrow=2)
 	rownames(out$tests) = c('tnn-test','shapiro-test')
 	colnames(out$tests) = c('p.value')
@@ -804,3 +800,5 @@ plot.thetaModel <- function(x, ylim=NULL, xlim=NULL, ylab=NULL, xlab=NULL, main=
 
 	points(x$mean, type = "l", col="blue", lwd=3)
 }
+
+
