@@ -59,7 +59,6 @@ twoTL <- function(y, h, level,
                   s_test, ## s_test = c("default","unit_root",TRUE, FALSE)
                   par_ini, estimation, lower, upper, opt.method, dynamic, xreg=NULL,
                   lambda=NULL   ## parameter of Box-Cox transformation
-                  #, run_bagging=TRUE  ## return de "matForec.sample" if TRUE.
                   )
   {
 
