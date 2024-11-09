@@ -50,6 +50,26 @@ seasonal_test = function(y, s_test = c("default","unit_root")){
 }
 
 
+## compute quantiles according to the level,
+## as level=c(80, 90) will compute lo 80, Hi 80, Lo 90, Hi 90
+#
+# bs_series: boostrap series distruted in columns
+# level: a vector with covers probabilities
+bootstrap_quantiles <- function( bs_series, level ){
+
+  nn = length(level)
+  qq = (1-0.01*level)/2
+  probs = numeric(2*nn)
+  probs[2*(1:nn)-1] = qq
+  probs[2*(1:nn)] = 1-qq
+
+  quantiles = t( apply(X=bs_series, MARGIN=1, FUN=quantile, probs=probs) )
+  colnames(quantiles) = unlist( lapply(X=1:nn, FUN=function(X) paste(c('Lo','Hi'), level[X]) ) )
+
+  return( quantiles )
+}
+
+
 ## par = c(ell0, alpha, theta)
 ## s_type = c("additive","multiplicative","stl")
 ## s_test = c("default","unit_root",TRUE, FALSE)
@@ -58,7 +78,8 @@ twoTL <- function(y, h, level,
                   s_type, ## s_type = c("additive","multiplicative","stl")
                   s_test, ## s_test = c("default","unit_root",TRUE, FALSE)
                   par_ini, estimation, lower, upper, opt.method, dynamic, xreg=NULL,
-                  lambda=NULL   ## parameter of Box-Cox transformation
+                  lambda=NULL,   ## parameter of Box-Cox transformation,
+                  nSample=2000   ## used to compute bootstrap prediction intervals
                   )
   {
 
@@ -233,7 +254,7 @@ twoTL <- function(y, h, level,
 	matForec.sample = NULL ## initialize
 
 	if(!is.null(level)){
-		nSample=200
+		#nSample=200
 		level = sort(level)
 		alpha = par[2]
 		theta = par[3]
@@ -253,17 +274,20 @@ twoTL <- function(y, h, level,
 			A = meanY - B*(i+2)/2
 		}
 
-		nn = length(level)
-		qq = (1-0.01*level)/2
-		probs = numeric(2*nn)
-		probs[2*(1:nn)-1] = qq
-		probs[2*(1:nn)] = 1-qq
-
-
-		quantiles = t( apply(X=matForec.sample, MARGIN=2, FUN=quantile, probs=probs) )
+		# nn = length(level)
+		# qq = (1-0.01*level)/2
+		# probs = numeric(2*nn)
+		# probs[2*(1:nn)-1] = qq
+		# probs[2*(1:nn)] = 1-qq
+		#
+		# quantiles = t( apply(X=matForec.sample, MARGIN=2, FUN=quantile, probs=probs) )
 
 		## included in version 2.7.3, it's used to compute bagging forecasts
-	  matForec.sample = ts( t( matForec.sample ), start = end(y) + c(0, 1), frequency = frequency(y) )
+		matForec.sample = t( matForec.sample )
+		quantiles = bootstrap_quantiles( bs_series=matForec.sample, level=level )
+		quantiles = ts( quantiles, start = end(y) + c(0, 1), frequency = frequency(y))
+		#colnames(quantiles) = unlist( lapply(X=1:length(level), FUN=function(X) paste(c('Lo','Hi'), level[X]) ) )
+	  matForec.sample = ts( matForec.sample , start = end(y) + c(0, 1), frequency = frequency(y) )
 	  colnames( matForec.sample ) = paste0( "sample", 1:ncol(matForec.sample) )
 		##
 
@@ -274,8 +298,7 @@ twoTL <- function(y, h, level,
 
 			matForec.sample = matForec.sample + y_reg;
 		}
-		quantiles = ts( quantiles, start = end(y) + c(0, 1), frequency = frequency(y))
-		colnames(quantiles) = unlist( lapply(X=1:nn, FUN=function(X) paste(c('Lo','Hi'), level[X]) ) )
+
 	}
 
 	if(run_s_decomp){
@@ -359,62 +382,160 @@ twoTL <- function(y, h, level,
 }
 
 
-dotm <- function(y, h=5, level=c(80,90,95), s_type="multiplicative", s_test="default",
+
+
+bagged_twoTL <- function(y, h, level,
+                        num_bootstrap = 1,   # number of bootstrap replication
+                        bs_bootstrap = NULL, # bootstrap block size
+                        s_type, ## s_type = c("additive","multiplicative","stl")
+                        s_test, ## s_test = c("default","unit_root",TRUE, FALSE)
+                        par_ini, estimation, lower, upper, opt.method, dynamic, xreg=NULL,
+                        lambda=NULL   ## parameter of Box-Cox transformation
+                        )
+{
+
+  nSample = 2000
+  y_bagged = list(y)
+  if(num_bootstrap > 1 ){
+    y_bagged = bld.mbb.bootstrap(y, num=num_bootstrap)
+    nSample = max( nSample %/% num_bootstrap, 1)
+  }
+
+  if(num_bootstrap>1 && is.null(level)){level=c(80,90,95);} ## important for running bagging
+
+  models = foreach(y_i = y_bagged) %do% {
+
+      fit = twoTL(y=y_i, h=h, level=level, s_type=s_type, s_test=s_test,
+              par_ini=par_ini, estimation=estimation, lower=lower, upper=upper,
+              opt.method=opt.method, dynamic=dynamic, xreg=xreg, lambda=lambda,
+              nSample=nSample)
+
+      fit
+  }
+
+  out = models[[1]]
+  out$num_bootstrap = num_bootstrap
+
+  if( num_bootstrap == 1 ){
+    out$matForec.sample = NULL
+    return(out);
+  }
+
+  # bs_means = foreach(fit = models, .combine=cbind) %do% { fit$mean; }
+  # colnames(bs_means) = paste0("m", 1:ncol(bs_means) )
+  # bs_means_mean = ts(rowMeans(bs_means), start=start(bs_means), frequency = frequency(y))
+  # bs_means_median = apply(X=bs_means, MARGIN=1, FUN=quantile,  probs=0.5)
+  # bs_means_median = ts(bs_means_median, start=start(bs_means), frequency = frequency(y))
+  # out$bs_means_mean = bs_means_mean
+  # out$bs_means_median = bs_means_median
+
+  bs_strapolations = foreach(fit = models, .combine=cbind) %do% { fit$matForec.sample; }
+  colnames(bs_strapolations) = paste0("m", 1:ncol(bs_strapolations) )
+  bs_st_mean = ts(rowMeans(bs_strapolations), start=start(bs_means), frequency = frequency(y))
+  bs_st_median = apply(X=bs_strapolations, MARGIN=1, FUN=quantile,  probs=0.5)
+  bs_st_median = ts(bs_st_median, start=start(bs_means), frequency = frequency(y))
+
+  out$bs_st_mean = bs_st_mean
+  out$bs_st_median =  bs_st_median
+
+  quantiles = bootstrap_quantiles( bs_series=bs_strapolations, level=level )
+  quantiles = ts( quantiles, start = end(y) + c(0, 1), frequency = frequency(y))
+  nn = length(level)
+  out$lower = quantiles[, 2*(1:nn)-1, drop=F]
+  out$upper = quantiles[, 2*(1:nn), drop=F]
+
+  out$matForec.sample = NULL
+  out$tests = NULL
+
+  return(out)
+}
+
+
+dotm <- function(y, h=5, level=c(80,90,95),
+                 num_bootstrap = 1,   # number of bootstrap replication
+                 bs_bootstrap = NULL, # bootstrap block size
+                 s_type="multiplicative",
+                 s_test="default",
                  lambda=NULL, par_ini=c(y[1]/2, 0.5, 2), estimation=TRUE,
                  lower=c(-1e+10, 0.1, 1.0), upper=c(1e+10, 0.99, 1e+10),
                  opt.method="Nelder-Mead", xreg=NULL ){
 
-	out = twoTL(y=y, h=h, level=level, s_type=s_type, s_test=s_test, par_ini=par_ini,
+	out =  bagged_twoTL( y=y, h=h, level=level,
+	            num_bootstrap = num_bootstrap, bs_bootstrap = bs_bootstrap,
+	            s_type=s_type, s_test=s_test, par_ini=par_ini,
 	            estimation=estimation, lower=lower, upper=upper, opt.method=opt.method,
 	            dynamic=TRUE, xreg=xreg, lambda=lambda)
 
 	out$method = "Dynamic Optimised Theta Model"
+	if(out$num_bootstrap > 1){ out$method = paste("Bagged", out$method); }
 
 	return(out)
 }
 
-dstm <- function(y, h=5, level=c(80,90,95), s_type="multiplicative", s_test="default",
+dstm <- function(y, h=5, level=c(80,90,95),
+                 num_bootstrap = 1,   # number of bootstrap replication
+                 bs_bootstrap = NULL, # bootstrap block size
+                 s_type="multiplicative", s_test="default",
                  lambda=NULL, par_ini=c(y[1]/2, 0.5),estimation=TRUE,
                  lower=c(-1e+10, 0.1), upper=c(1e+10, 0.99),
                  opt.method="Nelder-Mead", xreg=NULL){
 
-	out = twoTL(y=y, h=h, level=level, s_type=s_type, s_test=s_test, par_ini=c(par_ini,2.0),
+	out =  bagged_twoTL( y=y, h=h, level=level,
+	            num_bootstrap = num_bootstrap, bs_bootstrap = bs_bootstrap,
+	            s_type=s_type, s_test=s_test, par_ini=c(par_ini,2.0),
 	            estimation=estimation, lower=c(lower, 1.99999), upper=c(upper, 2.00001),
 		          opt.method=opt.method, dynamic=TRUE, xreg=xreg, lambda=lambda)
 
 	out$method = "Dynamic Standard Theta Model"
+	if(out$num_bootstrap > 1){ out$method = paste("Bagged", out$method); }
 	out$par = as.matrix(out$par[c('ell0','alpha'),])
 	colnames(out$par) = 'MLE'
+
 	return(out)
 }
 
 
-otm <- function(y, h=5, level=c(80,90,95), s_type="multiplicative", s_test="default",
+otm <- function(y, h=5, level=c(80,90,95),
+                num_bootstrap = 1,   # number of bootstrap replication
+                bs_bootstrap = NULL, # bootstrap block size
+                s_type="multiplicative", s_test="default",
                 lambda=NULL, par_ini=c(y[1]/2, 0.5, 2.0), estimation=TRUE,
                 lower=c(-1e+10, 0.1, 1.0), upper=c(1e+10, 0.99, 1e+10),
                 opt.method="Nelder-Mead", xreg=NULL){
 
-	out = twoTL(y=y, h=h, level=level, s_type=s_type, s_test=s_test,
+	out = bagged_twoTL( y=y, h=h, level=level,
+	            num_bootstrap = num_bootstrap, bs_bootstrap = bs_bootstrap,
+	            s_type=s_type, s_test=s_test,
 	            par_ini=par_ini, estimation=estimation, lower=lower,
 		          upper=upper, opt.method=opt.method, dynamic=FALSE, xreg=xreg,
 		          lambda=lambda)
+
 	out$method = "Optimised Theta Model"
+	if(out$num_bootstrap > 1){ out$method = paste("Bagged", out$method); }
+
 	return(out)
 }
 
-stm <- function(y, h=5, level=c(80,90,95), s_type="multiplicative", s_test="default",
+stm <- function(y, h=5, level=c(80,90,95),
+                num_bootstrap = 1,   # number of bootstrap replication
+                bs_bootstrap = NULL, # bootstrap block size
+                s_type="multiplicative", s_test="default",
                 lambda=NULL, par_ini=c(y[1]/2, 0.5), estimation=TRUE,
 	              lower=c(-1e+10, 0.1), upper=c(1e+10, 0.99),
                 opt.method="Nelder-Mead", xreg=NULL){
 
-	out = twoTL(y=y, h=h, level=level, s_type=s_type, s_test=s_test,
+	out = bagged_twoTL( y=y, h=h, level=level,
+	            num_bootstrap = num_bootstrap, bs_bootstrap = bs_bootstrap,
+	            s_type=s_type, s_test=s_test,
 	            par_ini=c(par_ini,2.0), estimation=estimation,
 	            lower=c(lower,1.99999), upper=c(upper,2.00001),
 	            opt.method=opt.method, dynamic=FALSE, xreg=xreg, lambda=lambda)
 
 	out$method = "Standard Theta Model"
+	if(out$num_bootstrap > 1){ out$method = paste("Bagged", out$method); }
 	out$par = as.matrix(out$par[c('ell0','alpha'),])
 	colnames(out$par) = 'MLE'
+
 	return(out)
 }
 
@@ -690,7 +811,15 @@ print.thetaModel <- function(x,...){
 	print( round(mm, 4 ) )
 
 	#if(x$tests[1,1] < 0.02){cat("\nWarning: According with the Teraesvirta Neural Network test with 98% of confidence, the unseasoned time series is not linearity in mean. This model may not be adequate.\n")}
-	if(x$tests[2,1] < 0.03){cat("\nWarning: According with the Shapiro-Wilk test with 97% of confidence, the unseasoned residuals do not follow the Normal distribution. The prediction intervals may not be adequate.\n")}
+	if(x$num_bootstrap==1){
+  	if(x$tests[2,1] < 0.03){
+  	  cat("\nWarning: According with the Shapiro-Wilk test with 97% of confidence,
+      the unseasoned residuals do not follow the Normal distribution.
+      The prediction intervals may not be adequate.
+      Consider using the bagged version of this model.\n")
+  	}
+	}
+
 }
 
 summary.thetaModel <- function(object,...){
@@ -739,6 +868,8 @@ summary.thetaModel <- function(object,...){
 
 	out$tests = object$tests
 
+	out$num_bootstrap = object$num_bootstrap
+
 	return(structure(out,class="summ"))
 }
 
@@ -765,7 +896,14 @@ print.summ <- function(x,...){
 	print(x$informationCriterions)
 
 	#if(x$tests[1,1] < 0.02){cat("\nWarning: According with the Teraesvirta Neural Network test with 98% of confidence, the unseasoned time series is not linearity in mean. This model may not be adequate.\n")}
-	if(x$tests[2,1] < 0.03){cat("\nWarning: According with the Shapiro-Wilk test with 97% of confidence, the unseasoned residuals do not follow the Normal distribution. The prediction intervals may not be adequate.\n")}
+	if(x$num_bootstrap==1){
+	  if(x$tests[2,1] < 0.03){
+	    cat("\nWarning: According with the Shapiro-Wilk test with 97% of confidence,
+      the unseasoned residuals do not follow the Normal distribution.
+      The prediction intervals may not be adequate.
+      Consider using the bagged version of this model.\n")
+	  }
+	}
 }
 
 plot.thetaModel <- function(x, ylim=NULL, xlim=NULL, ylab=NULL, xlab=NULL, main=NULL,...){
