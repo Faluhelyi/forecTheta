@@ -317,9 +317,7 @@ twoTL <- function(y, h, level,
 	  Y_fcast = InvBoxCox(Y_fcast, lambda)
 	  if(!is.null(level)){
 	    quantiles = InvBoxCox(quantiles, lambda)
-	    #if(run_bagging){
-	      matForec.sample =  InvBoxCox(matForec.sample, lambda);
-	     # }
+	    matForec.sample =  InvBoxCox(matForec.sample, lambda);
 	  }
 	}
 
