@@ -431,9 +431,9 @@ bagged_twoTL <- function(y, h, level,
 
   bs_strapolations = foreach(fit = models, .combine=cbind) %do% { fit$matForec.sample; }
   colnames(bs_strapolations) = paste0("m", 1:ncol(bs_strapolations) )
-  bs_st_mean = ts(rowMeans(bs_strapolations), start=start(bs_means), frequency = frequency(y))
+  bs_st_mean = ts(rowMeans(bs_strapolations), start=start(out$mean), frequency = frequency(y))
   bs_st_median = apply(X=bs_strapolations, MARGIN=1, FUN=quantile,  probs=0.5)
-  bs_st_median = ts(bs_st_median, start=start(bs_means), frequency = frequency(y))
+  bs_st_median = ts(bs_st_median, start=start(out$mean), frequency = frequency(y))
 
   out$bs_st_mean = bs_st_mean
   out$bs_st_median =  bs_st_median
@@ -444,7 +444,7 @@ bagged_twoTL <- function(y, h, level,
   out$lower = quantiles[, 2*(1:nn)-1, drop=F]
   out$upper = quantiles[, 2*(1:nn), drop=F]
 
-  out$matForec.sample = NULL
+  #out$matForec.sample = NULL
   out$tests = NULL
 
   return(out)
