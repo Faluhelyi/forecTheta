@@ -6,11 +6,15 @@ importFrom("graphics", "legend", "plot", "points", "polygon")
 
 importFrom("parallel","mclapply")
 
-importFrom("forecast","snaive", "mstl", "BoxCox.lambda", "BoxCox", "InvBoxCox")
+importFrom("foreach","%do%","foreach")
+
+importFrom("forecast","snaive", "mstl", "BoxCox.lambda", "BoxCox", "InvBoxCox", "bld.mbb.bootstrap")
 
 importFrom("tseries","terasvirta.test", "kpss.test")
 
-export(dotm, dstm, otm, stm, expSmoot, otm.arxiv, stheta, plot.thetaModel, groe, fixOrig, rolOrig,  errorMetric)
+export(dotm, dstm, otm, stm, expSmoot, otm.arxiv, stheta, plot.thetaModel, groe,
+       fixOrig, rolOrig,  errorMetric, bagged_dotm, bagged_dstm, bagged_otm,
+       bagged_stm)
 
 S3method(plot, thetaModel)
 S3method(print, thetaModel)

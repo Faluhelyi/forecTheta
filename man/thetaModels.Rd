@@ -17,35 +17,27 @@
 	We also provide an implementation for the Standard Theta Method (STheta) of Assimakopoulos and Nikolopoulos (2000).
 }
 \usage{
-	dotm(y, h=5, level=c(80,90,95),
-  	num_bootstrap = 1, bs_bootstrap = NULL,
-  	s_type="multiplicative", s_test="default",
+dotm(y, h=5, level=c(80,90,95),	s_type="multiplicative", s_test="default",
   	lambda=NULL, par_ini=c(y[1]/2, 0.5, 2),	estimation=TRUE,
-  	lower=c(-1e+10, 0.1, 1.0),upper=c(1e+10, 0.99, 1e+10),
+  	lower=c(-1e+10, 0.1, 1.0), upper=c(1e+10, 0.99, 1e+10),
   	opt.method="Nelder-Mead", xreg=NULL)
 
-	dstm(y, h=5, level=c(80,90,95),
-  	num_bootstrap = 1, bs_bootstrap = NULL,
-  	s_type="multiplicative", s_test="default",
+dstm(y, h=5, level=c(80,90,95), s_type="multiplicative", s_test="default",
   	lambda=NULL, par_ini=c(y[1]/2, 0.5), estimation=TRUE,
   	lower=c(-1e+10, 0.1), upper=c(1e+10, 0.99),
   	opt.method="Nelder-Mead", xreg=NULL)
 
-	otm(y, h=5, level=c(80,90,95),
-  	num_bootstrap = 1, bs_bootstrap = NULL,
-  	s_type="multiplicative", s_test="default",
+otm(y, h=5, level=c(80,90,95), s_type="multiplicative", s_test="default",
   	lambda=NULL, par_ini=c(y[1]/2, 0.5, 2), estimation=TRUE,
   	lower=c(-1e+10, 0.1, 1.0), upper=c(1e+10, 0.99, 1e+10),
   	opt.method="Nelder-Mead", xreg=NULL)
 
-	stm(y, h=5, level=c(80,90,95),
-  	num_bootstrap = 1, bs_bootstrap = NULL,
-  	s_type="multiplicative", s_test="default",
+stm(y, h=5, level=c(80,90,95), s_type="multiplicative", s_test="default",
   	lambda=NULL, par_ini=c(y[1]/2, 0.5), estimation=TRUE,
   	lower=c(-1e+10, 0.1), upper=c(1e+10, 0.99),
   	opt.method="Nelder-Mead", xreg=NULL)
 
-	stheta(y, h=5, s_type="multiplicative", s_test="default")
+stheta(y, h=5, s_type="multiplicative", s_test="default")
 }
 
 \arguments{
@@ -57,12 +49,6 @@
 	}
 	\item{level}{
 		Levels for prediction intervals.
-	}
-	\item{num_bootstrap}{
-    Number of bootstrap samples to be considered in the forecast (\code{num} argument of the \code{forecast::bld.mbb.bootstrap} function).
-	}
-	\item{bs_bootstrap}{
-    Block size for bootstrap samples to be considered in the forecast (\code{block_size} argument of the \code{forecast::bld.mbb.bootstrap} function). used only if \code{num_bootstrap >= 1}.
 	}
 	\item{s_type}{
 	  Use \code{"multiplicative"} for the classic multiplicative seasonal decomposition,
@@ -107,9 +93,12 @@
   By default, the 90\% significance seasonal Z-test, used by Assimakopoulos and Nikolopoulos (2000), is applied for quarterly and monthly time series. The possibility of first checking the unit root was included because it was pointed out that this test presents many flaws for time series with this characteristic (Fiorucci et al, 2016). In this case, the KPSS test is performed with a significance level of 5\% and in the case of a unit root, then the series is differentiated before checking for seasonal behavior.
 
 For details of each model see Fiorucci et al, 2016.
-If you are looking for the methods presented in the arXiv paper (Fiorucci et al, 2015), see \code{otm.arxiv()} function.
+If you are looking for the methods presented in the arXiv paper (Fiorucci et al, 2015), see \code{\link[forecTheta]{otm.arxiv}} function.
 
-This version allows bagging to be used in conjunction with the models, which usually generates considerably more accurate results, whether point or interval forecasts. In this case, \emph{Box-Cox and Loess-based decomposition bootstrap (BLD-MBB)} is used, for details see Bergmeir et al, 2016.
+This version allows bagging to be used in conjunction with these models, see \code{\link[forecTheta]{bagged_dotm}},
+	\code{\link[forecTheta]{bagged_dstm}},
+	\code{\link[forecTheta]{bagged_otm}} and
+	\code{\link[forecTheta]{bagged_stm}} functions.
 }
 \value{
 	An object of \code{thetaModel} class with one list containing the elements:
@@ -133,14 +122,18 @@ This version allows bagging to be used in conjunction with the models, which usu
 
 	Assimakopoulos, V. and Nikolopoulos k. (2000). \emph{The theta model: a decomposition approach to forecasting}. International Journal of Forecasting 16 (4), 521--530, <doi:10.1016/S0169-2070(00)00066-2>.
 
-	Bergmeir, C., Hyndman, R.J. and Benítez, J. M. (2016). \emph{Bagging exponential smoothing methods using STL decomposition and Box–Cox transformation}. International journal of forecasting 32 (2), 303--312, <doi:10.1016/j.ijforecast.2015.07.002>.
 }
 \author{
 	Jose Augusto Fiorucci, Francisco Louzada
 }
 
 \seealso{
-	\code{\link[forecTheta]{forecTheta-package}}, \code{\link[forecTheta]{otm.arxiv}}
+	\code{\link[forecTheta]{forecTheta-package}},
+	\code{\link[forecTheta]{bagged_dotm}},
+	\code{\link[forecTheta]{bagged_dstm}},
+	\code{\link[forecTheta]{bagged_otm}},
+	\code{\link[forecTheta]{bagged_stm}},
+	\code{\link[forecTheta]{otm.arxiv}}
 }
 
 \examples{

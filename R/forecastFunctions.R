@@ -382,8 +382,88 @@ twoTL <- function(y, h, level,
 }
 
 
+################################################################################
+## models of
+## Fiorucci J.A., Pellegrini T.R., Louzada F., Petropoulos F.,  Koehler, A.
+## (2016). Models for optimising the theta method and their relationship to
+## state space models, International Journal of Forecasting, 32 (4), 1151–1161,
+## <doi:10.1016/j.ijforecast.2016.02.005>
+dotm <- function(y, h=5, level=c(80,90,95),
+                 s_type="multiplicative",
+                 s_test="default",
+                 lambda=NULL, par_ini=c(y[1]/2, 0.5, 2), estimation=TRUE,
+                 lower=c(-1e+10, 0.1, 1.0), upper=c(1e+10, 0.99, 1e+10),
+                 opt.method="Nelder-Mead", xreg=NULL ){
+
+  out =  twoTL( y=y, h=h, level=level,
+                s_type=s_type, s_test=s_test, par_ini=par_ini,
+                estimation=estimation, lower=lower, upper=upper, opt.method=opt.method,
+                dynamic=TRUE, xreg=xreg, lambda=lambda)
+
+  out$method = "Dynamic Optimised Theta Model"
+
+  return(out)
+}
+
+dstm <- function(y, h=5, level=c(80,90,95),
+                 s_type="multiplicative", s_test="default",
+                 lambda=NULL, par_ini=c(y[1]/2, 0.5),estimation=TRUE,
+                 lower=c(-1e+10, 0.1), upper=c(1e+10, 0.99),
+                 opt.method="Nelder-Mead", xreg=NULL){
+
+  out =  twoTL( y=y, h=h, level=level,
+                s_type=s_type, s_test=s_test, par_ini=c(par_ini,2.0),
+                estimation=estimation, lower=c(lower, 1.99999), upper=c(upper, 2.00001),
+                opt.method=opt.method, dynamic=TRUE, xreg=xreg, lambda=lambda)
+
+  out$method = "Dynamic Standard Theta Model"
+  out$par = as.matrix(out$par[c('ell0','alpha'),])
+  colnames(out$par) = 'MLE'
+
+  return(out)
+}
 
 
+otm <- function(y, h=5, level=c(80,90,95),
+                s_type="multiplicative", s_test="default",
+                lambda=NULL, par_ini=c(y[1]/2, 0.5, 2.0), estimation=TRUE,
+                lower=c(-1e+10, 0.1, 1.0), upper=c(1e+10, 0.99, 1e+10),
+                opt.method="Nelder-Mead", xreg=NULL){
+
+  out = twoTL( y=y, h=h, level=level,
+               s_type=s_type, s_test=s_test,
+               par_ini=par_ini, estimation=estimation, lower=lower,
+               upper=upper, opt.method=opt.method, dynamic=FALSE, xreg=xreg,
+               lambda=lambda)
+
+  out$method = "Optimised Theta Model"
+
+  return(out)
+}
+
+stm <- function(y, h=5, level=c(80,90,95),
+                s_type="multiplicative", s_test="default",
+                lambda=NULL, par_ini=c(y[1]/2, 0.5), estimation=TRUE,
+                lower=c(-1e+10, 0.1), upper=c(1e+10, 0.99),
+                opt.method="Nelder-Mead", xreg=NULL){
+
+  out = twoTL( y=y, h=h, level=level,
+               s_type=s_type, s_test=s_test,
+               par_ini=c(par_ini,2.0), estimation=estimation,
+               lower=c(lower,1.99999), upper=c(upper,2.00001),
+               opt.method=opt.method, dynamic=FALSE, xreg=xreg, lambda=lambda)
+
+  out$method = "Standard Theta Model"
+  out$par = as.matrix(out$par[c('ell0','alpha'),])
+  colnames(out$par) = 'MLE'
+
+  return(out)
+}
+################################################################################
+
+
+
+############ Bagged Models #####################################################
 bagged_twoTL <- function(y, h, level,
                         num_bootstrap = 1,   # number of bootstrap replication
                         bs_bootstrap = NULL, # bootstrap block size
@@ -403,6 +483,7 @@ bagged_twoTL <- function(y, h, level,
 
   if(num_bootstrap>1 && is.null(level)){level=c(80,90,95);} ## important for running bagging
 
+  y_i = NULL
   models = foreach(y_i = y_bagged) %do% {
 
       fit = twoTL(y=y_i, h=h, level=level, s_type=s_type, s_test=s_test,
@@ -435,8 +516,8 @@ bagged_twoTL <- function(y, h, level,
   bs_st_median = apply(X=bs_strapolations, MARGIN=1, FUN=quantile,  probs=0.5)
   bs_st_median = ts(bs_st_median, start=start(out$mean), frequency = frequency(y))
 
-  out$bs_st_mean = bs_st_mean
-  out$bs_st_median =  bs_st_median
+  out$mean = bs_st_mean
+  out$median =  bs_st_median
 
   quantiles = bootstrap_quantiles( bs_series=bs_strapolations, level=level )
   quantiles = ts( quantiles, start = end(y) + c(0, 1), frequency = frequency(y))
@@ -444,15 +525,17 @@ bagged_twoTL <- function(y, h, level,
   out$lower = quantiles[, 2*(1:nn)-1, drop=F]
   out$upper = quantiles[, 2*(1:nn), drop=F]
 
-  #out$matForec.sample = NULL
+  out$matForec.sample = NULL
   out$tests = NULL
 
   return(out)
 }
 
 
-dotm <- function(y, h=5, level=c(80,90,95),
-                 num_bootstrap = 1,   # number of bootstrap replication
+
+
+bagged_dotm <- function(y, h=5, level=c(80,90,95),
+                 num_bootstrap = 100,   # number of bootstrap replication
                  bs_bootstrap = NULL, # bootstrap block size
                  s_type="multiplicative",
                  s_test="default",
@@ -460,88 +543,92 @@ dotm <- function(y, h=5, level=c(80,90,95),
                  lower=c(-1e+10, 0.1, 1.0), upper=c(1e+10, 0.99, 1e+10),
                  opt.method="Nelder-Mead", xreg=NULL ){
 
-	out =  bagged_twoTL( y=y, h=h, level=level,
-	            num_bootstrap = num_bootstrap, bs_bootstrap = bs_bootstrap,
-	            s_type=s_type, s_test=s_test, par_ini=par_ini,
-	            estimation=estimation, lower=lower, upper=upper, opt.method=opt.method,
-	            dynamic=TRUE, xreg=xreg, lambda=lambda)
+  out =  bagged_twoTL( y=y, h=h, level=level,
+                       num_bootstrap = num_bootstrap, bs_bootstrap = bs_bootstrap,
+                       s_type=s_type, s_test=s_test, par_ini=par_ini,
+                       estimation=estimation, lower=lower, upper=upper, opt.method=opt.method,
+                       dynamic=TRUE, xreg=xreg, lambda=lambda)
 
-	out$method = "Dynamic Optimised Theta Model"
-	if(out$num_bootstrap > 1){ out$method = paste("Bagged", out$method); }
+  out$method = "Dynamic Optimised Theta Model"
+  if(out$num_bootstrap > 1){ out$method = paste("Bagged", out$method); }
 
-	return(out)
+  return(out)
 }
 
-dstm <- function(y, h=5, level=c(80,90,95),
-                 num_bootstrap = 1,   # number of bootstrap replication
+bagged_dstm <- function(y, h=5, level=c(80,90,95),
+                 num_bootstrap = 100,   # number of bootstrap replication
                  bs_bootstrap = NULL, # bootstrap block size
                  s_type="multiplicative", s_test="default",
                  lambda=NULL, par_ini=c(y[1]/2, 0.5),estimation=TRUE,
                  lower=c(-1e+10, 0.1), upper=c(1e+10, 0.99),
                  opt.method="Nelder-Mead", xreg=NULL){
 
-	out =  bagged_twoTL( y=y, h=h, level=level,
-	            num_bootstrap = num_bootstrap, bs_bootstrap = bs_bootstrap,
-	            s_type=s_type, s_test=s_test, par_ini=c(par_ini,2.0),
-	            estimation=estimation, lower=c(lower, 1.99999), upper=c(upper, 2.00001),
-		          opt.method=opt.method, dynamic=TRUE, xreg=xreg, lambda=lambda)
+  out =  bagged_twoTL( y=y, h=h, level=level,
+                       num_bootstrap = num_bootstrap, bs_bootstrap = bs_bootstrap,
+                       s_type=s_type, s_test=s_test, par_ini=c(par_ini,2.0),
+                       estimation=estimation, lower=c(lower, 1.99999), upper=c(upper, 2.00001),
+                       opt.method=opt.method, dynamic=TRUE, xreg=xreg, lambda=lambda)
 
-	out$method = "Dynamic Standard Theta Model"
-	if(out$num_bootstrap > 1){ out$method = paste("Bagged", out$method); }
-	out$par = as.matrix(out$par[c('ell0','alpha'),])
-	colnames(out$par) = 'MLE'
+  out$method = "Dynamic Standard Theta Model"
+  if(out$num_bootstrap > 1){ out$method = paste("Bagged", out$method); }
+  out$par = as.matrix(out$par[c('ell0','alpha'),])
+  colnames(out$par) = 'MLE'
 
-	return(out)
+  return(out)
 }
 
 
-otm <- function(y, h=5, level=c(80,90,95),
-                num_bootstrap = 1,   # number of bootstrap replication
+bagged_otm <- function(y, h=5, level=c(80,90,95),
+                num_bootstrap = 100,   # number of bootstrap replication
                 bs_bootstrap = NULL, # bootstrap block size
                 s_type="multiplicative", s_test="default",
                 lambda=NULL, par_ini=c(y[1]/2, 0.5, 2.0), estimation=TRUE,
                 lower=c(-1e+10, 0.1, 1.0), upper=c(1e+10, 0.99, 1e+10),
                 opt.method="Nelder-Mead", xreg=NULL){
 
-	out = bagged_twoTL( y=y, h=h, level=level,
-	            num_bootstrap = num_bootstrap, bs_bootstrap = bs_bootstrap,
-	            s_type=s_type, s_test=s_test,
-	            par_ini=par_ini, estimation=estimation, lower=lower,
-		          upper=upper, opt.method=opt.method, dynamic=FALSE, xreg=xreg,
-		          lambda=lambda)
+  out = bagged_twoTL( y=y, h=h, level=level,
+                      num_bootstrap = num_bootstrap, bs_bootstrap = bs_bootstrap,
+                      s_type=s_type, s_test=s_test,
+                      par_ini=par_ini, estimation=estimation, lower=lower,
+                      upper=upper, opt.method=opt.method, dynamic=FALSE, xreg=xreg,
+                      lambda=lambda)
 
-	out$method = "Optimised Theta Model"
-	if(out$num_bootstrap > 1){ out$method = paste("Bagged", out$method); }
+  out$method = "Optimised Theta Model"
+  if(out$num_bootstrap > 1){ out$method = paste("Bagged", out$method); }
 
-	return(out)
+  return(out)
 }
 
-stm <- function(y, h=5, level=c(80,90,95),
-                num_bootstrap = 1,   # number of bootstrap replication
+bagged_stm <- function(y, h=5, level=c(80,90,95),
+                num_bootstrap = 100,   # number of bootstrap replication
                 bs_bootstrap = NULL, # bootstrap block size
                 s_type="multiplicative", s_test="default",
                 lambda=NULL, par_ini=c(y[1]/2, 0.5), estimation=TRUE,
-	              lower=c(-1e+10, 0.1), upper=c(1e+10, 0.99),
+                lower=c(-1e+10, 0.1), upper=c(1e+10, 0.99),
                 opt.method="Nelder-Mead", xreg=NULL){
 
-	out = bagged_twoTL( y=y, h=h, level=level,
-	            num_bootstrap = num_bootstrap, bs_bootstrap = bs_bootstrap,
-	            s_type=s_type, s_test=s_test,
-	            par_ini=c(par_ini,2.0), estimation=estimation,
-	            lower=c(lower,1.99999), upper=c(upper,2.00001),
-	            opt.method=opt.method, dynamic=FALSE, xreg=xreg, lambda=lambda)
+  out = bagged_twoTL( y=y, h=h, level=level,
+                      num_bootstrap = num_bootstrap, bs_bootstrap = bs_bootstrap,
+                      s_type=s_type, s_test=s_test,
+                      par_ini=c(par_ini,2.0), estimation=estimation,
+                      lower=c(lower,1.99999), upper=c(upper,2.00001),
+                      opt.method=opt.method, dynamic=FALSE, xreg=xreg, lambda=lambda)
 
-	out$method = "Standard Theta Model"
-	if(out$num_bootstrap > 1){ out$method = paste("Bagged", out$method); }
-	out$par = as.matrix(out$par[c('ell0','alpha'),])
-	colnames(out$par) = 'MLE'
+  out$method = "Standard Theta Model"
+  if(out$num_bootstrap > 1){ out$method = paste("Bagged", out$method); }
+  out$par = as.matrix(out$par[c('ell0','alpha'),])
+  colnames(out$par) = 'MLE'
 
-	return(out)
+  return(out)
 }
+################################################################################
 
 
-############  SES  ################################
-expSmoot <- function(y, h=5, ell0=NULL, alpha=NULL, lower = c(-1e+10, 0.1), upper = c(1e+10, 0.99)){
+
+
+###################  SES  ######################################################
+expSmoot <- function(y, h=5, ell0=NULL, alpha=NULL, lower = c(-1e+10, 0.1),
+                     upper = c(1e+10, 0.99)){
 	n = length(y)
 
 	mu = error = ell = numeric(n+h)
@@ -559,7 +646,8 @@ expSmoot <- function(y, h=5, ell0=NULL, alpha=NULL, lower = c(-1e+10, 0.1), uppe
 			ell[i] = ell[i-1] + alpha*error[i]
 		}
 
-		return( list(mean = mu[(n+1):(n+h)], fitted = mu[1:n], error = error[1:n], ell0=ell0, alpha=alpha)  )
+		return( list(mean = mu[(n+1):(n+h)], fitted = mu[1:n], error = error[1:n],
+		             ell0=ell0, alpha=alpha)  )
 	}
 
 	### sum of square error
@@ -609,9 +697,13 @@ expSmoot <- function(y, h=5, ell0=NULL, alpha=NULL, lower = c(-1e+10, 0.1), uppe
 	return(fit)
 
 }
+################################################################################
 
 
 
+####### OTM as implementade in Fioruci et al (2015)#############################
+## Fioruci J.A., Pellegrini T.R., Louzada F., Petropoulos F. (2015). The Optimised
+# Theta Method. arXiv preprint, arXiv:1503.03529.
 otm.arxiv <- function( y, h=5, s=NULL, theta=NULL, tLineExtrap=expSmoot, g="sAPE",
 		approach="c",
 		n1=NULL, m=NULL, H=NULL, p=NULL,
@@ -773,6 +865,8 @@ stheta <- function (y, h=5, s_type="multiplicative", s_test="default")
 	return(out)
 }
 
+################################################################################
+
 print.thetaModel <- function(x,...){
 
 	cat(paste("Forecast method:", x$method, "\n\n"))
@@ -811,7 +905,7 @@ print.thetaModel <- function(x,...){
 	print( round(mm, 4 ) )
 
 	#if(x$tests[1,1] < 0.02){cat("\nWarning: According with the Teraesvirta Neural Network test with 98% of confidence, the unseasoned time series is not linearity in mean. This model may not be adequate.\n")}
-	if(x$num_bootstrap==1){
+	if(is.null(x$num_bootstrap)){
   	if(x$tests[2,1] < 0.03){
   	  cat("\nWarning: According with the Shapiro-Wilk test with 97% of confidence,
       the unseasoned residuals do not follow the Normal distribution.
@@ -868,7 +962,8 @@ summary.thetaModel <- function(object,...){
 
 	out$tests = object$tests
 
-	out$num_bootstrap = object$num_bootstrap
+	if( !is.null(object$num_bootstrap))
+	  out$num_bootstrap = object$num_bootstrap
 
 	return(structure(out,class="summ"))
 }
@@ -896,7 +991,7 @@ print.summ <- function(x,...){
 	print(x$informationCriterions)
 
 	#if(x$tests[1,1] < 0.02){cat("\nWarning: According with the Teraesvirta Neural Network test with 98% of confidence, the unseasoned time series is not linearity in mean. This model may not be adequate.\n")}
-	if(x$num_bootstrap==1){
+	if( is.null( x$num_bootstrap) ) {
 	  if(x$tests[2,1] < 0.03){
 	    cat("\nWarning: According with the Shapiro-Wilk test with 97% of confidence,
       the unseasoned residuals do not follow the Normal distribution.
