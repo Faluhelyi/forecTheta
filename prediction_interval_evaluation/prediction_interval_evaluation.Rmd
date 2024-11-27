@@ -1,0 +1,169 @@
+---
+title: "Evaluating Prediction Intervals"
+subtitle: "Study Using the M3 Competition Dataset"
+author: "Igor Faluhelyi"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+devtools::load_all(".")
+library(Mcomp)
+library(parallel)
+library(doParallel)
+library(iterators)
+
+# cluster config
+cl <- makeCluster(detectCores(logical = FALSE))
+registerDoParallel(cl)
+
+# load local forecTheta for each node and export those functions
+clusterEvalQ(cl, devtools::load_all("."))
+clusterExport(cl, c("dotm", "dstm", "otm", "stm"))
+
+out_dotm <- foreach(
+  i = 1:3003, .packages = c("foreach", "forecast", "Mcomp")
+) %dopar% {
+  x <- M3[[i]]$x
+  h <- M3[[i]]$h
+  f <- dotm(y = x, h = h)
+}
+
+out_dstm <- foreach(
+  i = 1:3003, .packages = c("foreach", "forecast", "Mcomp")
+) %dopar% {
+  x <- M3[[i]]$x
+  h <- M3[[i]]$h
+  f <- dstm(y = x, h = h)
+}
+
+out_otm <- foreach(
+  i = 1:3003, .packages = c("foreach", "forecast", "Mcomp")
+) %dopar% {
+  x <- M3[[i]]$x
+  h <- M3[[i]]$h
+  f <- otm(y = x, h = h)
+}
+
+out_stm <- foreach(
+  i = 1:3003, .packages = c("foreach", "forecast", "Mcomp")
+) %dopar% {
+  x <- M3[[i]]$x
+  h <- M3[[i]]$h
+  f <- stm(y = x, h = h)
+}
+
+stopCluster(cl)
+
+# models out list
+out <- list(out_stm, out_otm, out_dstm, out_dotm)
+```
+
+# Modelos sem \textit{bagging}
+
+## STM
+
+```{r}
+lo <- matrix(NA, nrow=3003, ncol=18)
+hi <- matrix(NA, nrow=3003, ncol=18)
+obs = matrix(NA, nrow=3003, ncol=18) #matrix of the out-sample values
+
+coverage_rates <- c()
+for(i in 1:3003){
+  x=M3[[i]]$x
+  h=M3[[i]]$h
+  obs[i, 1:h] = M3[[i]]$xx
+  lo[i, 1:h] = out_stm[[i]]$lower[, 3] #.95 interval
+  hi[i, 1:h] = out_stm[[i]]$upper[, 3] #.95 interval
+  
+  coverage_rates <- c(
+    coverage_rates,
+    calculate_coverage_rate(obs[i, 1:h], lo[i, 1:h], hi[i, 1:h])
+  )
+}
+
+results <- evaluate_coverage_rates(coverage_rates)
+
+results$summary
+```
+
+
+
+## OTM
+
+```{r}
+lo <- matrix(NA, nrow=3003, ncol=18)
+hi <- matrix(NA, nrow=3003, ncol=18)
+obs = matrix(NA, nrow=3003, ncol=18) #matrix of the out-sample values
+
+coverage_rates <- c()
+for(i in 1:3003){
+  x=M3[[i]]$x
+  h=M3[[i]]$h
+  obs[i, 1:h] = M3[[i]]$xx
+  lo[i, 1:h] = out_otm[[i]]$lower[, 3] #.95 interval
+  hi[i, 1:h] = out_otm[[i]]$upper[, 3] #.95 interval
+  
+  coverage_rates <- c(
+    coverage_rates,
+    calculate_coverage_rate(obs[i, 1:h], lo[i, 1:h], hi[i, 1:h])
+  )
+}
+
+results <- evaluate_coverage_rates(coverage_rates)
+
+results$summary
+```
+
+## DSTM
+
+```{r}
+lo <- matrix(NA, nrow=3003, ncol=18)
+hi <- matrix(NA, nrow=3003, ncol=18)
+obs = matrix(NA, nrow=3003, ncol=18) #matrix of the out-sample values
+
+coverage_rates <- c()
+for(i in 1:3003){
+  x=M3[[i]]$x
+  h=M3[[i]]$h
+  obs[i, 1:h] = M3[[i]]$xx
+  lo[i, 1:h] = out_dstm[[i]]$lower[, 3] #.95 interval
+  hi[i, 1:h] = out_dstm[[i]]$upper[, 3] #.95 interval
+  
+  coverage_rates <- c(
+    coverage_rates,
+    calculate_coverage_rate(obs[i, 1:h], lo[i, 1:h], hi[i, 1:h])
+  )
+}
+
+results <- evaluate_coverage_rates(coverage_rates)
+
+results$summary
+```
+
+## DOTM
+
+```{r}
+lo <- matrix(NA, nrow=3003, ncol=18)
+hi <- matrix(NA, nrow=3003, ncol=18)
+obs = matrix(NA, nrow=3003, ncol=18) #matrix of the out-sample values
+
+coverage_rates <- c()
+for(i in 1:3003){
+  x=M3[[i]]$x
+  h=M3[[i]]$h
+  obs[i, 1:h] = M3[[i]]$xx
+  lo[i, 1:h] = out_dotm[[i]]$lower[, 3] #.95 interval
+  hi[i, 1:h] = out_dotm[[i]]$upper[, 3] #.95 interval
+  
+  coverage_rates <- c(
+    coverage_rates,
+    calculate_coverage_rate(obs[i, 1:h], lo[i, 1:h], hi[i, 1:h])
+  )
+}
+
+results <- evaluate_coverage_rates(coverage_rates)
+
+results$summary
+```
