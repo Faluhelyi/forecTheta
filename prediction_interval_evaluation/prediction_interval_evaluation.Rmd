@@ -3,7 +3,11 @@ title: "Evaluating Prediction Intervals"
 subtitle: "Study Using the M3 Competition Dataset"
 author: "Igor Faluhelyi"
 date: "`r Sys.Date()`"
-output: pdf_document
+output:
+  pdf_document:
+    number_sections: true
+    toc: true
+    toc_depth: 3
 ---
 
 ```{r setup, include=FALSE}
@@ -20,7 +24,10 @@ registerDoParallel(cl)
 
 # load local forecTheta for each node and export those functions
 clusterEvalQ(cl, devtools::load_all("."))
-clusterExport(cl, c("dotm", "dstm", "otm", "stm"))
+clusterExport(
+  cl,
+  c("dotm", "dstm", "otm", "stm", "bagged_dotm", "bagged_dstm", "bagged_otm", "bagged_stm")
+)
 
 out_dotm <- foreach(
   i = 1:3003, .packages = c("foreach", "forecast", "Mcomp")
@@ -54,15 +61,46 @@ out_stm <- foreach(
   f <- stm(y = x, h = h)
 }
 
-stopCluster(cl)
+out_bagged_dotm <- foreach(
+  i = 1:3003, .packages = c("foreach", "forecast", "Mcomp")
+) %dopar% {
+  x <- M3[[i]]$x
+  h <- M3[[i]]$h
+  f <- bagged_dotm(y = x, h = h, num_bootstrap = 40)
+}
 
-# models out list
-out <- list(out_stm, out_otm, out_dstm, out_dotm)
+out_bagged_dstm <- foreach(
+  i = 1:3003, .packages = c("foreach", "forecast", "Mcomp")
+) %dopar% {
+  x <- M3[[i]]$x
+  h <- M3[[i]]$h
+  f <- bagged_dstm(y = x, h = h, num_bootstrap = 40)
+}
+
+out_bagged_otm <- foreach(
+  i = 1:3003, .packages = c("foreach", "forecast", "Mcomp")
+) %dopar% {
+  x <- M3[[i]]$x
+  h <- M3[[i]]$h
+  f <- bagged_otm(y = x, h = h, num_bootstrap = 40)
+}
+
+out_bagged_stm <- foreach(
+  i = 1:3003, .packages = c("foreach", "forecast", "Mcomp")
+) %dopar% {
+  x <- M3[[i]]$x
+  h <- M3[[i]]$h
+  f <- bagged_stm(y = x, h = h, num_bootstrap = 40)
+}
+
+stopCluster(cl)
 ```
 
-# Modelos sem \textit{bagging}
+# Avaliação da taxa de cobertura
 
-## STM
+## Modelos sem \textit{bagging}
+
+### STM
 
 ```{r}
 lo <- matrix(NA, nrow=3003, ncol=18)
@@ -90,7 +128,7 @@ results$summary
 
 
 
-## OTM
+### OTM
 
 ```{r}
 lo <- matrix(NA, nrow=3003, ncol=18)
@@ -116,7 +154,7 @@ results <- evaluate_coverage_rates(coverage_rates)
 results$summary
 ```
 
-## DSTM
+### DSTM
 
 ```{r}
 lo <- matrix(NA, nrow=3003, ncol=18)
@@ -142,7 +180,7 @@ results <- evaluate_coverage_rates(coverage_rates)
 results$summary
 ```
 
-## DOTM
+### DOTM
 
 ```{r}
 lo <- matrix(NA, nrow=3003, ncol=18)
@@ -156,6 +194,115 @@ for(i in 1:3003){
   obs[i, 1:h] = M3[[i]]$xx
   lo[i, 1:h] = out_dotm[[i]]$lower[, 3] #.95 interval
   hi[i, 1:h] = out_dotm[[i]]$upper[, 3] #.95 interval
+  
+  coverage_rates <- c(
+    coverage_rates,
+    calculate_coverage_rate(obs[i, 1:h], lo[i, 1:h], hi[i, 1:h])
+  )
+}
+
+results <- evaluate_coverage_rates(coverage_rates)
+
+results$summary
+```
+
+
+## Modelos com \textit{bagging}
+
+### \textit{Bagged} STM
+
+```{r}
+lo <- matrix(NA, nrow=3003, ncol=18)
+hi <- matrix(NA, nrow=3003, ncol=18)
+obs = matrix(NA, nrow=3003, ncol=18) #matrix of the out-sample values
+
+coverage_rates <- c()
+for(i in 1:3003){
+  x=M3[[i]]$x
+  h=M3[[i]]$h
+  obs[i, 1:h] = M3[[i]]$xx
+  lo[i, 1:h] = out_bagged_stm[[i]]$lower[, 3] #.95 interval
+  hi[i, 1:h] = out_bagged_stm[[i]]$upper[, 3] #.95 interval
+  
+  coverage_rates <- c(
+    coverage_rates,
+    calculate_coverage_rate(obs[i, 1:h], lo[i, 1:h], hi[i, 1:h])
+  )
+}
+
+results <- evaluate_coverage_rates(coverage_rates)
+
+results$summary
+```
+
+
+
+### \textit{Bagged} OTM
+
+```{r}
+lo <- matrix(NA, nrow=3003, ncol=18)
+hi <- matrix(NA, nrow=3003, ncol=18)
+obs = matrix(NA, nrow=3003, ncol=18) #matrix of the out-sample values
+
+coverage_rates <- c()
+for(i in 1:3003){
+  x=M3[[i]]$x
+  h=M3[[i]]$h
+  obs[i, 1:h] = M3[[i]]$xx
+  lo[i, 1:h] = out_bagged_otm[[i]]$lower[, 3] #.95 interval
+  hi[i, 1:h] = out_bagged_otm[[i]]$upper[, 3] #.95 interval
+  
+  coverage_rates <- c(
+    coverage_rates,
+    calculate_coverage_rate(obs[i, 1:h], lo[i, 1:h], hi[i, 1:h])
+  )
+}
+
+results <- evaluate_coverage_rates(coverage_rates)
+
+results$summary
+```
+
+### \textit{Bagged} DSTM
+
+```{r}
+lo <- matrix(NA, nrow=3003, ncol=18)
+hi <- matrix(NA, nrow=3003, ncol=18)
+obs = matrix(NA, nrow=3003, ncol=18) #matrix of the out-sample values
+
+coverage_rates <- c()
+for(i in 1:3003){
+  x=M3[[i]]$x
+  h=M3[[i]]$h
+  obs[i, 1:h] = M3[[i]]$xx
+  lo[i, 1:h] = out_bagged_dstm[[i]]$lower[, 3] #.95 interval
+  hi[i, 1:h] = out_bagged_dstm[[i]]$upper[, 3] #.95 interval
+  
+  coverage_rates <- c(
+    coverage_rates,
+    calculate_coverage_rate(obs[i, 1:h], lo[i, 1:h], hi[i, 1:h])
+  )
+}
+
+results <- evaluate_coverage_rates(coverage_rates)
+
+results$summary
+```
+
+### \textit{Bagged} DOTM
+
+```{r}
+lo <- matrix(NA, nrow=3003, ncol=18)
+hi <- matrix(NA, nrow=3003, ncol=18)
+obs = matrix(NA, nrow=3003, ncol=18) #matrix of the out-sample values
+
+coverage_rates <- c()
+for(i in 1:3003){
+  x=M3[[i]]$x
+  h=M3[[i]]$h
+  obs[i, 1:h] = M3[[i]]$xx
+  lo[i, 1:h] = out_bagged_dotm[[i]]$lower[, 3] #.95 interval
+  hi[i, 1:h] = out_bagged_dotm[[i]]$upper[, 3] #.95 interval
   
   coverage_rates <- c(
     coverage_rates,

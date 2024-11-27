@@ -72,6 +72,69 @@ calculate_coverage_rate <- function(actual_values, lower_bounds, upper_bounds) {
   return(coverage_rate)
 }
 
+#' Calculate Mean Scaled Interval Score (MSIS)
+#'
+#' Computes the MSIS for prediction intervals, measuring the accuracy and precision 
+#' of forecast intervals while considering scaling based on past errors.
+#'
+#' @param actual A numeric vector of actual values.
+#' @param lower A numeric vector of lower bounds of the prediction intervals.
+#' @param upper A numeric vector of upper bounds of the prediction intervals.
+#' @param scale A numeric value for scaling, typically based on the mean absolute 
+#'              error of a naive forecast over a training period.
+#' @param alpha A numeric value for the significance level of the interval (default is 0.05).
+#'
+#' @return A single numeric value representing the MSIS.
+#' @examples
+#' actual <- c(100, 110, 90)
+#' lower <- c(95, 105, 85)
+#' upper <- c(105, 115, 95)
+#' scale <- 10
+#' msis(actual, lower, upper, scale)
+#' @export
+msis <- function(actual, lower, upper, scale, alpha = 0.05) {
+  if (length(actual) != length(lower) || length(actual) != length(upper)) {
+    stop("All input vectors must have the same length.")
+  }
+  
+  n <- length(actual)
+  interval_score <- mean((upper - lower) + 
+                           (2 / alpha) * (lower - actual) * (actual < lower) + 
+                           (2 / alpha) * (actual - upper) * (actual > upper))
+  
+  msis_value <- interval_score / scale
+  return(msis_value)
+}
+
+#' Calculate Absolute Coverage Difference (ACD)
+#'
+#' Computes the ACD for prediction intervals, measuring how close the actual 
+#' coverage is to the expected coverage level.
+#'
+#' @param actual A numeric vector of actual values.
+#' @param lower A numeric vector of lower bounds of the prediction intervals.
+#' @param upper A numeric vector of upper bounds of the prediction intervals.
+#' @param alpha A numeric value for the significance level of the interval (default is 0.05).
+#'
+#' @return A single numeric value representing the ACD.
+#' @examples
+#' actual <- c(100, 110, 90)
+#' lower <- c(95, 105, 85)
+#' upper <- c(105, 115, 95)
+#' acd(actual, lower, upper)
+#' @export
+acd <- function(actual, lower, upper, alpha = 0.05) {
+  if (length(actual) != length(lower) || length(actual) != length(upper)) {
+    stop("All input vectors must have the same length.")
+  }
+  
+  n <- length(actual)
+  in_interval <- (actual >= lower & actual <= upper)
+  coverage_rate <- mean(in_interval)
+  acd_value <- abs(coverage_rate - (1 - alpha))
+  
+  return(acd_value)
+}
 
 #' Evaluate Coverage Rates for Multiple Time Series
 #'
