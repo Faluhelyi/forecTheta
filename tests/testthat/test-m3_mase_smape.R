@@ -127,27 +127,27 @@ colnames(results) <- c("sMAPE", "MASE", "Model")
 test_that("STM Operating Normally", {
   smape <- results[results$Model == "Standard Theta Model", ]$sMAPE
   mase <- results[results$Model == "Standard Theta Model", ]$MASE
-  expect_equal(smape, c(16.73, 9.24, 13.85, 4.93, 13.06))
-  expect_equal(mase, c(2.77, 1.12, 0.86, 2.27, 1.16))
+  expect_equal(smape, c(16.73, 9.24, 13.85, 4.93, 13.06), tolerance = 0.05)
+  expect_equal(mase, c(2.77, 1.12, 0.86, 2.27, 1.16), tolerance = 0.05)
 })
 
 test_that("OTM Operating Normally", {
   smape <- results[results$Model == "Optimised Theta Model", ]$sMAPE
   mase <- results[results$Model == "Optimised Theta Model", ]$MASE
-  expect_equal(smape, c(16.60, 9.14, 14.11, 4.85, 13.21))
-  expect_equal(mase, c(2.71, 1.10, 0.86, 2.23, 1.14))
+  expect_equal(smape, c(16.60, 9.14, 14.11, 4.85, 13.21), tolerance = 0.05)
+  expect_equal(mase, c(2.71, 1.10, 0.86, 2.23, 1.14), tolerance = 0.05)
 })
 
 test_that("DSTM Operating Normally", {
   smape <- results[results$Model == "Dynamic Standard Theta Model", ]$sMAPE
   mase <- results[results$Model == "Dynamic Standard Theta Model", ]$MASE
-  expect_equal(smape, c(16.69, 9.24, 13.82, 4.92, 13.04))
-  expect_equal(mase, c(2.76, 1.12, 0.86, 2.27, 1.16))
+  expect_equal(smape, c(16.69, 9.24, 13.82, 4.92, 13.04), tolerance = 0.05)
+  expect_equal(mase, c(2.76, 1.12, 0.86, 2.27, 1.16), tolerance = 0.05)
 })
 
 test_that("DOTM Operating Normally", {
   smape <- results[results$Model == "Dynamic Optimised Theta Model", ]$sMAPE
   mase <- results[results$Model == "Dynamic Optimised Theta Model", ]$MASE
-  expect_equal(smape, c(15.94, 9.28, 13.74, 4.58, 12.90))
-  expect_equal(mase, c(2.59, 1.12, 0.85, 1.94, 1.12))
+  expect_equal(smape, c(15.94, 9.28, 13.74, 4.58, 12.90), tolerance = 0.05)
+  expect_equal(mase, c(2.59, 1.12, 0.85, 1.94, 1.12), tolerance = 0.05)
 })

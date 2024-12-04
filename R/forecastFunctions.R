@@ -79,7 +79,7 @@ twoTL <- function(y, h, level,
                   s_test, ## s_test = c("default","unit_root",TRUE, FALSE)
                   par_ini, estimation, lower, upper, opt.method, dynamic, xreg=NULL,
                   lambda=NULL,   ## parameter of Box-Cox transformation,
-                  nSample=2000   ## used to compute bootstrap prediction intervals
+                  nSample=20000   ## used to compute bootstrap prediction intervals
                   )
   {
 
@@ -474,11 +474,12 @@ bagged_twoTL <- function(y, h, level,
                         )
 {
 
-  nSample = 2000
+  nSample = 20000
   y_bagged = list(y)
   if(num_bootstrap > 1 ){
     y_bagged = bld.mbb.bootstrap(y, num=num_bootstrap)
-    nSample = max( nSample %/% num_bootstrap, 1)
+    #nSample = max( nSample %/% num_bootstrap, 1)
+    nSample = nSample/10
   }
 
   if(num_bootstrap>1 && is.null(level)){level=c(80,90,95);} ## important for running bagging

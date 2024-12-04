@@ -13,84 +13,54 @@ output:
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 devtools::load_all(".")
-library(Mcomp)
-library(parallel)
 library(doParallel)
-library(iterators)
+library(foreach)
+library(forecast)
+library(Mcomp)
+library(gridExtra)
+library(grid)
 
-# cluster config
-cl <- makeCluster(detectCores(logical = FALSE))
+cl <- makeCluster(detectCores(logical = TRUE))
 registerDoParallel(cl)
 
-# load local forecTheta for each node and export those functions
+
 clusterEvalQ(cl, devtools::load_all("."))
-clusterExport(
-  cl,
-  c("dotm", "dstm", "otm", "stm", "bagged_dotm", "bagged_dstm", "bagged_otm", "bagged_stm")
-)
+methods <- c("dotm", "dstm", "otm", "stm", "bagged_dotm", "bagged_dstm", "bagged_otm", "bagged_stm")
+clusterExport(cl, methods)
 
-out_dotm <- foreach(
-  i = 1:3003, .packages = c("foreach", "forecast", "Mcomp")
-) %dopar% {
-  x <- M3[[i]]$x
-  h <- M3[[i]]$h
-  f <- dotm(y = x, h = h)
+run_model <- function(method, frequency_filter, data, num_bootstrap = NULL) {
+  foreach(
+    i = seq_along(data), .packages = c("forecast", "Mcomp")
+  ) %dopar% {
+    x <- data[[i]]$x
+    h <- data[[i]]$h
+    if (data[[i]]$period == frequency_filter) {
+      result <- if (!is.null(num_bootstrap)) {
+        do.call(method, list(y = x, h = h, num_bootstrap = num_bootstrap))
+      } else {
+        do.call(method, list(y = x, h = h))
+      }
+      return(result)
+    } else {
+      return(NULL)
+    }
+  } %>% Filter(Negate(is.null), .)
 }
 
-out_dstm <- foreach(
-  i = 1:3003, .packages = c("foreach", "forecast", "Mcomp")
-) %dopar% {
-  x <- M3[[i]]$x
-  h <- M3[[i]]$h
-  f <- dstm(y = x, h = h)
-}
+results <- list()
 
-out_otm <- foreach(
-  i = 1:3003, .packages = c("foreach", "forecast", "Mcomp")
-) %dopar% {
-  x <- M3[[i]]$x
-  h <- M3[[i]]$h
-  f <- otm(y = x, h = h)
-}
-
-out_stm <- foreach(
-  i = 1:3003, .packages = c("foreach", "forecast", "Mcomp")
-) %dopar% {
-  x <- M3[[i]]$x
-  h <- M3[[i]]$h
-  f <- stm(y = x, h = h)
-}
-
-out_bagged_dotm <- foreach(
-  i = 1:3003, .packages = c("foreach", "forecast", "Mcomp")
-) %dopar% {
-  x <- M3[[i]]$x
-  h <- M3[[i]]$h
-  f <- bagged_dotm(y = x, h = h, num_bootstrap = 40)
-}
-
-out_bagged_dstm <- foreach(
-  i = 1:3003, .packages = c("foreach", "forecast", "Mcomp")
-) %dopar% {
-  x <- M3[[i]]$x
-  h <- M3[[i]]$h
-  f <- bagged_dstm(y = x, h = h, num_bootstrap = 40)
-}
-
-out_bagged_otm <- foreach(
-  i = 1:3003, .packages = c("foreach", "forecast", "Mcomp")
-) %dopar% {
-  x <- M3[[i]]$x
-  h <- M3[[i]]$h
-  f <- bagged_otm(y = x, h = h, num_bootstrap = 40)
-}
-
-out_bagged_stm <- foreach(
-  i = 1:3003, .packages = c("foreach", "forecast", "Mcomp")
-) %dopar% {
-  x <- M3[[i]]$x
-  h <- M3[[i]]$h
-  f <- bagged_stm(y = x, h = h, num_bootstrap = 40)
+for (method in methods) {
+  if (grepl("bagged_", method)) {
+    results[[paste0(method, "_anua")]] <- run_model(method, "YEARLY", M3, num_bootstrap = 150)
+    results[[paste0(method, "_trim")]] <- run_model(method, "QUARTERLY", M3, num_bootstrap = 150)
+    results[[paste0(method, "_mens")]] <- run_model(method, "MONTHLY", M3, num_bootstrap = 150)
+    results[[paste0(method, "_outr")]] <- run_model(method, "OTHER", M3, num_bootstrap = 150)
+  } else {
+    results[[paste0(method, "_anua")]] <- run_model(method, "YEARLY", M3)
+    results[[paste0(method, "_trim")]] <- run_model(method, "QUARTERLY", M3)
+    results[[paste0(method, "_mens")]] <- run_model(method, "MONTHLY", M3)
+    results[[paste0(method, "_outr")]] <- run_model(method, "OTHER", M3)
+  }
 }
 
 stopCluster(cl)
@@ -98,219 +68,836 @@ stopCluster(cl)
 
 # Avaliação da taxa de cobertura
 
-## Modelos sem \textit{bagging}
-
-### STM
+## Frequência Anual
 
 ```{r}
-lo <- matrix(NA, nrow=3003, ncol=18)
-hi <- matrix(NA, nrow=3003, ncol=18)
-obs = matrix(NA, nrow=3003, ncol=18) #matrix of the out-sample values
+# Process the model type and calculate coverage rates
+process_model <- function(model_key, label, M3, results, n_rows = 3003, n_cols = 18) {
+  lo <- matrix(NA, nrow = n_rows, ncol = n_cols)
+  hi <- matrix(NA, nrow = n_rows, ncol = n_cols)
+  obs <- matrix(NA, nrow = n_rows, ncol = n_cols)
+  coverage_rates <- c()
+  c <- 1
 
-coverage_rates <- c()
-for(i in 1:3003){
-  x=M3[[i]]$x
-  h=M3[[i]]$h
-  obs[i, 1:h] = M3[[i]]$xx
-  lo[i, 1:h] = out_stm[[i]]$lower[, 3] #.95 interval
-  hi[i, 1:h] = out_stm[[i]]$upper[, 3] #.95 interval
-  
-  coverage_rates <- c(
-    coverage_rates,
-    calculate_coverage_rate(obs[i, 1:h], lo[i, 1:h], hi[i, 1:h])
-  )
+  for (i in 1:n_rows) {
+    x <- M3[[i]]$x
+    h <- M3[[i]]$h
+    if (M3[[i]]$period == "YEARLY") {
+      obs[i, 1:h] <- M3[[i]]$xx
+      lo[i, 1:h] <- results[[model_key]][[c]]$lower[, 3] # 95% interval
+      hi[i, 1:h] <- results[[model_key]][[c]]$upper[, 3]
+      c <- c + 1
+      coverage_rates <- c(
+        coverage_rates,
+        calculate_coverage_rate(obs[i, 1:h], lo[i, 1:h], hi[i, 1:h])
+      )
+    }
+  }
+
+  evaluate_coverage_rates(coverage_rates, label)
 }
 
-results <- evaluate_coverage_rates(coverage_rates)
+# Process each model and store the results
+results_list <- list(
+  STM = process_model("stm_anua", "STM", M3, results),
+  OTM = process_model("otm_anua", "OTM", M3, results),
+  DSTM = process_model("dstm_anua", "DSTM", M3, results),
+  DOTM = process_model("dotm_anua", "DOTM", M3, results)
+)
 
-results$summary
+# Plot results
+titulo_principal <- textGrob("Frequencia Anual", 
+                             gp = gpar(fontsize = 16, fontface = "bold"))
+
+grid.arrange(
+  titulo_principal,
+  arrangeGrob(
+    results_list$STM$plot,
+    results_list$OTM$plot,
+    results_list$DSTM$plot,
+    results_list$DOTM$plot,
+    nrow = 2
+  ),
+  nrow = 2,
+  heights = c(0.1, 1)
+)
+
+# Combine summaries for comparison
+summaries <- cbind(
+  DOTM = results_list$DOTM$summary,
+  DSTM = results_list$DSTM$summary,
+  OTM = results_list$OTM$summary,
+  STM = results_list$STM$summary
+)
+summaries
+```
+
+```{r}
+results_list <- list(
+  Bagged_STM = process_model("bagged_stm_anua", "Bagged_STM", M3, results),
+  Bagged_OTM = process_model("bagged_otm_anua", "Bagged_OTM", M3, results),
+  Bagged_DSTM = process_model("bagged_dstm_anua", "Bagged_DSTM", M3, results),
+  Bagged_DOTM = process_model("bagged_dotm_anua", "Bagged_DOTM", M3, results)
+)
+
+titulo_principal <- textGrob("Frequencia Anual", 
+                             gp = gpar(fontsize = 16, fontface = "bold"))
+
+grid.arrange(
+  titulo_principal,
+  arrangeGrob(
+    results_list$Bagged_STM$plot,
+    results_list$Bagged_OTM$plot,
+    results_list$Bagged_DSTM$plot,
+    results_list$Bagged_DOTM$plot,
+    nrow = 2
+  ),
+  nrow = 2,
+  heights = c(0.1, 1)
+)
+
+summaries <- cbind(
+  DOTM = results_list$Bagged_DOTM$summary,
+  DSTM = results_list$Bagged_DSTM$summary,
+  OTM = results_list$Bagged_OTM$summary,
+  STM = results_list$Bagged_STM$summary
+)
+summaries
+
+```
+
+## Frequência Mensal
+
+```{r}
+# Process the model type and calculate coverage rates
+process_model <- function(model_key, label, M3, results, n_rows = 3003, n_cols = 18) {
+  lo <- matrix(NA, nrow = n_rows, ncol = n_cols)
+  hi <- matrix(NA, nrow = n_rows, ncol = n_cols)
+  obs <- matrix(NA, nrow = n_rows, ncol = n_cols)
+  coverage_rates <- c()
+  c <- 1
+
+  for (i in 1:n_rows) {
+    x <- M3[[i]]$x
+    h <- M3[[i]]$h
+    if (M3[[i]]$period == "MONTHLY") {
+      obs[i, 1:h] <- M3[[i]]$xx
+      lo[i, 1:h] <- results[[model_key]][[c]]$lower[, 3] # 95% interval
+      hi[i, 1:h] <- results[[model_key]][[c]]$upper[, 3]
+      c <- c + 1
+      coverage_rates <- c(
+        coverage_rates,
+        calculate_coverage_rate(obs[i, 1:h], lo[i, 1:h], hi[i, 1:h])
+      )
+    }
+  }
+
+  evaluate_coverage_rates(coverage_rates, label)
+}
+
+# Process each model and store the results
+results_list <- list(
+  STM = process_model("stm_mens", "STM", M3, results),
+  OTM = process_model("otm_mens", "OTM", M3, results),
+  DSTM = process_model("dstm_mens", "DSTM", M3, results),
+  DOTM = process_model("dotm_mens", "DOTM", M3, results)
+)
+
+# Plot results
+titulo_principal <- textGrob("Frequencia Mensal", 
+                             gp = gpar(fontsize = 16, fontface = "bold"))
+
+grid.arrange(
+  titulo_principal,
+  arrangeGrob(
+    results_list$STM$plot,
+    results_list$OTM$plot,
+    results_list$DSTM$plot,
+    results_list$DOTM$plot,
+    nrow = 2
+  ),
+  nrow = 2,
+  heights = c(0.1, 1)
+)
+
+# Combine summaries for comparison
+summaries <- cbind(
+  DOTM = results_list$DOTM$summary,
+  DSTM = results_list$DSTM$summary,
+  OTM = results_list$OTM$summary,
+  STM = results_list$STM$summary
+)
+summaries
+
+```
+
+```{r}
+results_list <- list(
+  Bagged_STM = process_model("bagged_stm_mens", "Bagged_STM", M3, results),
+  Bagged_OTM = process_model("bagged_otm_mens", "Bagged_OTM", M3, results),
+  Bagged_DSTM = process_model("bagged_dstm_mens", "Bagged_DSTM", M3, results),
+  Bagged_DOTM = process_model("bagged_dotm_mens", "Bagged_DOTM", M3, results)
+)
+
+
+titulo_principal <- textGrob("Frequencia Mensal", 
+                             gp = gpar(fontsize = 16, fontface = "bold"))
+
+grid.arrange(
+  titulo_principal,
+  arrangeGrob(
+    results_list$Bagged_STM$plot,
+    results_list$Bagged_OTM$plot,
+    results_list$Bagged_DSTM$plot,
+    results_list$Bagged_DOTM$plot,
+    nrow = 2
+  ),
+  nrow = 2,
+  heights = c(0.1, 1)
+)
+
+summaries <- cbind(
+  DOTM = results_list$Bagged_DOTM$summary,
+  DSTM = results_list$Bagged_DSTM$summary,
+  OTM = results_list$Bagged_OTM$summary,
+  STM = results_list$Bagged_STM$summary
+)
+summaries
+
 ```
 
 
-
-### OTM
+## Frequência Trimestral
 
 ```{r}
-lo <- matrix(NA, nrow=3003, ncol=18)
-hi <- matrix(NA, nrow=3003, ncol=18)
-obs = matrix(NA, nrow=3003, ncol=18) #matrix of the out-sample values
+# Process the model type and calculate coverage rates
+process_model <- function(model_key, label, M3, results, n_rows = 3003, n_cols = 18) {
+  lo <- matrix(NA, nrow = n_rows, ncol = n_cols)
+  hi <- matrix(NA, nrow = n_rows, ncol = n_cols)
+  obs <- matrix(NA, nrow = n_rows, ncol = n_cols)
+  coverage_rates <- c()
+  c <- 1
 
-coverage_rates <- c()
-for(i in 1:3003){
-  x=M3[[i]]$x
-  h=M3[[i]]$h
-  obs[i, 1:h] = M3[[i]]$xx
-  lo[i, 1:h] = out_otm[[i]]$lower[, 3] #.95 interval
-  hi[i, 1:h] = out_otm[[i]]$upper[, 3] #.95 interval
-  
-  coverage_rates <- c(
-    coverage_rates,
-    calculate_coverage_rate(obs[i, 1:h], lo[i, 1:h], hi[i, 1:h])
-  )
+  for (i in 1:n_rows) {
+    x <- M3[[i]]$x
+    h <- M3[[i]]$h
+    if (M3[[i]]$period == "QUARTERLY") {
+      obs[i, 1:h] <- M3[[i]]$xx
+      lo[i, 1:h] <- results[[model_key]][[c]]$lower[, 3] # 95% interval
+      hi[i, 1:h] <- results[[model_key]][[c]]$upper[, 3]
+      c <- c + 1
+      coverage_rates <- c(
+        coverage_rates,
+        calculate_coverage_rate(obs[i, 1:h], lo[i, 1:h], hi[i, 1:h])
+      )
+    }
+  }
+
+  evaluate_coverage_rates(coverage_rates, label)
 }
 
-results <- evaluate_coverage_rates(coverage_rates)
+# Process each model and store the results
+results_list <- list(
+  STM = process_model("stm_trim", "STM", M3, results),
+  OTM = process_model("otm_trim", "OTM", M3, results),
+  DSTM = process_model("dstm_trim", "DSTM", M3, results),
+  DOTM = process_model("dotm_trim", "DOTM", M3, results)
+)
 
-results$summary
+# Plot results
+titulo_principal <- textGrob("Frequencia Trimestral", 
+                             gp = gpar(fontsize = 16, fontface = "bold"))
+
+grid.arrange(
+  titulo_principal,
+  arrangeGrob(
+    results_list$STM$plot,
+    results_list$OTM$plot,
+    results_list$DSTM$plot,
+    results_list$DOTM$plot,
+    nrow = 2
+  ),
+  nrow = 2,
+  heights = c(0.1, 1)
+)
+
+# Combine summaries for comparison
+summaries <- cbind(
+  DOTM = results_list$DOTM$summary,
+  DSTM = results_list$DSTM$summary,
+  OTM = results_list$OTM$summary,
+  STM = results_list$STM$summary
+)
+summaries
+
 ```
 
-### DSTM
-
 ```{r}
-lo <- matrix(NA, nrow=3003, ncol=18)
-hi <- matrix(NA, nrow=3003, ncol=18)
-obs = matrix(NA, nrow=3003, ncol=18) #matrix of the out-sample values
+results_list <- list(
+  Bagged_STM = process_model("bagged_stm_trim", "Bagged_STM", M3, results),
+  Bagged_OTM = process_model("bagged_otm_trim", "Bagged_OTM", M3, results),
+  Bagged_DSTM = process_model("bagged_dstm_trim", "Bagged_DSTM", M3, results),
+  Bagged_DOTM = process_model("bagged_dotm_trim", "Bagged_DOTM", M3, results)
+)
 
-coverage_rates <- c()
-for(i in 1:3003){
-  x=M3[[i]]$x
-  h=M3[[i]]$h
-  obs[i, 1:h] = M3[[i]]$xx
-  lo[i, 1:h] = out_dstm[[i]]$lower[, 3] #.95 interval
-  hi[i, 1:h] = out_dstm[[i]]$upper[, 3] #.95 interval
-  
-  coverage_rates <- c(
-    coverage_rates,
-    calculate_coverage_rate(obs[i, 1:h], lo[i, 1:h], hi[i, 1:h])
-  )
-}
 
-results <- evaluate_coverage_rates(coverage_rates)
+titulo_principal <- textGrob("Frequencia Trimestral", 
+                             gp = gpar(fontsize = 16, fontface = "bold"))
 
-results$summary
+grid.arrange(
+  titulo_principal,
+  arrangeGrob(
+    results_list$Bagged_STM$plot,
+    results_list$Bagged_OTM$plot,
+    results_list$Bagged_DSTM$plot,
+    results_list$Bagged_DOTM$plot,
+    nrow = 2
+  ),
+  nrow = 2,
+  heights = c(0.1, 1)
+)
+
+summaries <- cbind(
+  DOTM = results_list$Bagged_DOTM$summary,
+  DSTM = results_list$Bagged_DSTM$summary,
+  OTM = results_list$Bagged_OTM$summary,
+  STM = results_list$Bagged_STM$summary
+)
+summaries
+
 ```
 
-### DOTM
+## Demais Frequências
 
 ```{r}
-lo <- matrix(NA, nrow=3003, ncol=18)
-hi <- matrix(NA, nrow=3003, ncol=18)
-obs = matrix(NA, nrow=3003, ncol=18) #matrix of the out-sample values
+# Process the model type and calculate coverage rates
+process_model <- function(model_key, label, M3, results, n_rows = 3003, n_cols = 18) {
+  lo <- matrix(NA, nrow = n_rows, ncol = n_cols)
+  hi <- matrix(NA, nrow = n_rows, ncol = n_cols)
+  obs <- matrix(NA, nrow = n_rows, ncol = n_cols)
+  coverage_rates <- c()
+  c <- 1
 
-coverage_rates <- c()
-for(i in 1:3003){
-  x=M3[[i]]$x
-  h=M3[[i]]$h
-  obs[i, 1:h] = M3[[i]]$xx
-  lo[i, 1:h] = out_dotm[[i]]$lower[, 3] #.95 interval
-  hi[i, 1:h] = out_dotm[[i]]$upper[, 3] #.95 interval
-  
-  coverage_rates <- c(
-    coverage_rates,
-    calculate_coverage_rate(obs[i, 1:h], lo[i, 1:h], hi[i, 1:h])
-  )
+  for (i in 1:n_rows) {
+    x <- M3[[i]]$x
+    h <- M3[[i]]$h
+    if (M3[[i]]$period == "OTHER") {
+      obs[i, 1:h] <- M3[[i]]$xx
+      lo[i, 1:h] <- results[[model_key]][[c]]$lower[, 3] # 95% interval
+      hi[i, 1:h] <- results[[model_key]][[c]]$upper[, 3]
+      c <- c + 1
+      coverage_rates <- c(
+        coverage_rates,
+        calculate_coverage_rate(obs[i, 1:h], lo[i, 1:h], hi[i, 1:h])
+      )
+    }
+  }
+
+  evaluate_coverage_rates(coverage_rates, label)
 }
 
-results <- evaluate_coverage_rates(coverage_rates)
+# Process each model and store the results
+results_list <- list(
+  STM = process_model("stm_outr", "STM", M3, results),
+  OTM = process_model("otm_outr", "OTM", M3, results),
+  DSTM = process_model("dstm_outr", "DSTM", M3, results),
+  DOTM = process_model("dotm_outr", "DOTM", M3, results)
+)
 
-results$summary
+# Plot results
+titulo_principal <- textGrob("Demais Frequencias", 
+                             gp = gpar(fontsize = 16, fontface = "bold"))
+
+grid.arrange(
+  titulo_principal,
+  arrangeGrob(
+    results_list$STM$plot,
+    results_list$OTM$plot,
+    results_list$DSTM$plot,
+    results_list$DOTM$plot,
+    nrow = 2
+  ),
+  nrow = 2,
+  heights = c(0.1, 1)
+)
+
+# Combine summaries for comparison
+summaries <- cbind(
+  DOTM = results_list$DOTM$summary,
+  DSTM = results_list$DSTM$summary,
+  OTM = results_list$OTM$summary,
+  STM = results_list$STM$summary
+)
+summaries
+
+```
+
+```{r}
+results_list <- list(
+  Bagged_STM = process_model("bagged_stm_outr", "Bagged_STM", M3, results),
+  Bagged_OTM = process_model("bagged_otm_outr", "Bagged_OTM", M3, results),
+  Bagged_DSTM = process_model("bagged_dstm_outr", "Bagged_DSTM", M3, results),
+  Bagged_DOTM = process_model("bagged_dotm_outr", "Bagged_DOTM", M3, results)
+)
+
+
+titulo_principal <- textGrob("Demais Frequencias", 
+                             gp = gpar(fontsize = 16, fontface = "bold"))
+
+grid.arrange(
+  titulo_principal,
+  arrangeGrob(
+    results_list$Bagged_STM$plot,
+    results_list$Bagged_OTM$plot,
+    results_list$Bagged_DSTM$plot,
+    results_list$Bagged_DOTM$plot,
+    nrow = 2
+  ),
+  nrow = 2,
+  heights = c(0.1, 1)
+)
+
+summaries <- cbind(
+  DOTM = results_list$Bagged_DOTM$summary,
+  DSTM = results_list$Bagged_DSTM$summary,
+  OTM = results_list$Bagged_OTM$summary,
+  STM = results_list$Bagged_STM$summary
+)
+summaries
+```
+
+# ACD
+
+## Frequência Anual
+
+```{r}
+# Process the model type and calculate coverage rates
+process_model <- function(model_key, label, M3, results, n_rows = 3003, n_cols = 18) {
+  lo <- matrix(NA, nrow = n_rows, ncol = n_cols)
+  hi <- matrix(NA, nrow = n_rows, ncol = n_cols)
+  obs <- matrix(NA, nrow = n_rows, ncol = n_cols)
+  acd_vec <- c()
+  c <- 1
+
+  for (i in 1:n_rows) {
+    x <- M3[[i]]$x
+    h <- M3[[i]]$h
+    if (M3[[i]]$period == "YEARLY") {
+      obs[i, 1:h] <- M3[[i]]$xx
+      lo[i, 1:h] <- results[[model_key]][[c]]$lower[, 3] # 95% interval
+      hi[i, 1:h] <- results[[model_key]][[c]]$upper[, 3]
+      c <- c + 1
+      acd_vec <- c(
+        acd_vec,
+        acd(obs[i, 1:h], lo[i, 1:h], hi[i, 1:h], alpha = 0.05)
+      )
+    }
+  }
+
+  return(mean(acd_vec))
+}
+
+# Process each model and store the results
+results_list <- list(
+  STM = process_model("stm_anua", "STM", M3, results),
+  OTM = process_model("otm_anua", "OTM", M3, results),
+  DSTM = process_model("dstm_anua", "DSTM", M3, results),
+  DOTM = process_model("dotm_anua", "DOTM", M3, results)
+)
+
+# ACD medio
+results_list
+```
+
+```{r}
+results_list <- list(
+  Bagged_STM = process_model("bagged_stm_anua", "Bagged_STM", M3, results),
+  Bagged_OTM = process_model("bagged_otm_anua", "Bagged_OTM", M3, results),
+  Bagged_DSTM = process_model("bagged_dstm_anua", "Bagged_DSTM", M3, results),
+  Bagged_DOTM = process_model("bagged_dotm_anua", "Bagged_DOTM", M3, results)
+)
+
+# ACD medio
+results_list
 ```
 
 
-## Modelos com \textit{bagging}
-
-### \textit{Bagged} STM
+## Frequência Mensal
 
 ```{r}
-lo <- matrix(NA, nrow=3003, ncol=18)
-hi <- matrix(NA, nrow=3003, ncol=18)
-obs = matrix(NA, nrow=3003, ncol=18) #matrix of the out-sample values
+# Process the model type and calculate coverage rates
+process_model <- function(model_key, label, M3, results, n_rows = 3003, n_cols = 18) {
+  lo <- matrix(NA, nrow = n_rows, ncol = n_cols)
+  hi <- matrix(NA, nrow = n_rows, ncol = n_cols)
+  obs <- matrix(NA, nrow = n_rows, ncol = n_cols)
+  acd_vec <- c()
+  c <- 1
 
-coverage_rates <- c()
-for(i in 1:3003){
-  x=M3[[i]]$x
-  h=M3[[i]]$h
-  obs[i, 1:h] = M3[[i]]$xx
-  lo[i, 1:h] = out_bagged_stm[[i]]$lower[, 3] #.95 interval
-  hi[i, 1:h] = out_bagged_stm[[i]]$upper[, 3] #.95 interval
-  
-  coverage_rates <- c(
-    coverage_rates,
-    calculate_coverage_rate(obs[i, 1:h], lo[i, 1:h], hi[i, 1:h])
-  )
+  for (i in 1:n_rows) {
+    x <- M3[[i]]$x
+    h <- M3[[i]]$h
+    if (M3[[i]]$period == "MONTHLY") {
+      obs[i, 1:h] <- M3[[i]]$xx
+      lo[i, 1:h] <- results[[model_key]][[c]]$lower[, 3] # 95% interval
+      hi[i, 1:h] <- results[[model_key]][[c]]$upper[, 3]
+      c <- c + 1
+      acd_vec <- c(
+        acd_vec,
+        acd(obs[i, 1:h], lo[i, 1:h], hi[i, 1:h])
+      )
+    }
+  }
+  return(mean(acd_vec))
 }
 
-results <- evaluate_coverage_rates(coverage_rates)
+# Process each model and store the results
+results_list <- list(
+  STM = process_model("stm_mens", "STM", M3, results),
+  OTM = process_model("otm_mens", "OTM", M3, results),
+  DSTM = process_model("dstm_mens", "DSTM", M3, results),
+  DOTM = process_model("dotm_mens", "DOTM", M3, results)
+)
 
-results$summary
+results_list
+```
+
+```{r}
+results_list <- list(
+  Bagged_STM = process_model("bagged_stm_mens", "Bagged_STM", M3, results),
+  Bagged_OTM = process_model("bagged_otm_mens", "Bagged_OTM", M3, results),
+  Bagged_DSTM = process_model("bagged_dstm_mens", "Bagged_DSTM", M3, results),
+  Bagged_DOTM = process_model("bagged_dotm_mens", "Bagged_DOTM", M3, results)
+)
+
+
+# ACD medio
+results_list
+```
+
+## Frequência Trimestral
+
+```{r}
+# Process the model type and calculate coverage rates
+process_model <- function(model_key, label, M3, results, n_rows = 3003, n_cols = 18) {
+  lo <- matrix(NA, nrow = n_rows, ncol = n_cols)
+  hi <- matrix(NA, nrow = n_rows, ncol = n_cols)
+  obs <- matrix(NA, nrow = n_rows, ncol = n_cols)
+  acd_vec <- c()
+  c <- 1
+
+  for (i in 1:n_rows) {
+    x <- M3[[i]]$x
+    h <- M3[[i]]$h
+    if (M3[[i]]$period == "QUARTERLY") {
+      obs[i, 1:h] <- M3[[i]]$xx
+      lo[i, 1:h] <- results[[model_key]][[c]]$lower[, 3] # 95% interval
+      hi[i, 1:h] <- results[[model_key]][[c]]$upper[, 3]
+      c <- c + 1
+      acd_vec <- c(
+        acd_vec,
+        acd(obs[i, 1:h], lo[i, 1:h], hi[i, 1:h])
+      )
+    }
+  }
+  return(mean(acd_vec))
+}
+
+# Process each model and store the results
+results_list <- list(
+  STM = process_model("stm_trim", "STM", M3, results),
+  OTM = process_model("otm_trim", "OTM", M3, results),
+  DSTM = process_model("dstm_trim", "DSTM", M3, results),
+  DOTM = process_model("dotm_trim", "DOTM", M3, results)
+)
+
+# ACD medio
+results_list
+```
+
+```{r}
+results_list <- list(
+  Bagged_STM = process_model("bagged_stm_trim", "Bagged_STM", M3, results),
+  Bagged_OTM = process_model("bagged_otm_trim", "Bagged_OTM", M3, results),
+  Bagged_DSTM = process_model("bagged_dstm_trim", "Bagged_DSTM", M3, results),
+  Bagged_DOTM = process_model("bagged_dotm_trim", "Bagged_DOTM", M3, results)
+)
+
+
+# ACD medio
+results_list
+```
+
+## Demais Frequências
+
+```{r}
+# Process the model type and calculate coverage rates
+process_model <- function(model_key, label, M3, results, n_rows = 3003, n_cols = 18) {
+  lo <- matrix(NA, nrow = n_rows, ncol = n_cols)
+  hi <- matrix(NA, nrow = n_rows, ncol = n_cols)
+  obs <- matrix(NA, nrow = n_rows, ncol = n_cols)
+  acd_vec <- c()
+  c <- 1
+
+  for (i in 1:n_rows) {
+    x <- M3[[i]]$x
+    h <- M3[[i]]$h
+    if (M3[[i]]$period == "OTHER") {
+      obs[i, 1:h] <- M3[[i]]$xx
+      lo[i, 1:h] <- results[[model_key]][[c]]$lower[, 3] # 95% interval
+      hi[i, 1:h] <- results[[model_key]][[c]]$upper[, 3]
+      c <- c + 1
+      acd_vec <- c(
+        acd_vec,
+        acd(obs[i, 1:h], lo[i, 1:h], hi[i, 1:h])
+      )
+    }
+  }
+  return(mean(acd_vec))
+}
+
+# Process each model and store the results
+results_list <- list(
+  STM = process_model("stm_outr", "STM", M3, results),
+  OTM = process_model("otm_outr", "OTM", M3, results),
+  DSTM = process_model("dstm_outr", "DSTM", M3, results),
+  DOTM = process_model("dotm_outr", "DOTM", M3, results)
+)
+
+# ACD medio
+results_list
+```
+
+```{r}
+results_list <- list(
+  Bagged_STM = process_model("bagged_stm_outr", "Bagged_STM", M3, results),
+  Bagged_OTM = process_model("bagged_otm_outr", "Bagged_OTM", M3, results),
+  Bagged_DSTM = process_model("bagged_dstm_outr", "Bagged_DSTM", M3, results),
+  Bagged_DOTM = process_model("bagged_dotm_outr", "Bagged_DOTM", M3, results)
+)
+
+
+# ACD medio
+results_list
+```
+
+# MSIS
+
+## Frequência Anual
+
+```{r}
+# Process the model type and calculate coverage rates
+process_model <- function(model_key, label, M3, results, n_rows = 3003, n_cols = 18) {
+  lo <- matrix(NA, nrow = n_rows, ncol = n_cols)
+  hi <- matrix(NA, nrow = n_rows, ncol = n_cols)
+  obs <- matrix(NA, nrow = n_rows, ncol = n_cols)
+  msis_vec <- c()
+  c <- 1
+
+  for (i in 1:n_rows) {
+    x <- M3[[i]]$x
+    h <- M3[[i]]$h
+    if (M3[[i]]$period == "YEARLY") {
+      snaive_forecast <- snaive(x, h = h)$mean
+      obs[i, 1:h] <- M3[[i]]$xx
+      scale = mean(abs(snaive_forecast - obs[i, 1:h]))
+      lo[i, 1:h] <- results[[model_key]][[c]]$lower[, 3] # 95% interval
+      hi[i, 1:h] <- results[[model_key]][[c]]$upper[, 3]
+      c <- c + 1
+      msis_vec <- c(
+        msis_vec,
+        msis(obs[i, 1:h], lo[i, 1:h], hi[i, 1:h], scale = scale, alpha=0.05)
+      )
+    }
+  }
+
+  return(mean(msis_vec))
+}
+
+# Process each model and store the results
+results_list <- list(
+  STM = process_model("stm_anua", "STM", M3, results),
+  OTM = process_model("otm_anua", "OTM", M3, results),
+  DSTM = process_model("dstm_anua", "DSTM", M3, results),
+  DOTM = process_model("dotm_anua", "DOTM", M3, results)
+)
+
+# MSIS medio
+results_list
+```
+
+```{r}
+results_list <- list(
+  Bagged_STM = process_model("bagged_stm_anua", "Bagged_STM", M3, results),
+  Bagged_OTM = process_model("bagged_otm_anua", "Bagged_OTM", M3, results),
+  Bagged_DSTM = process_model("bagged_dstm_anua", "Bagged_DSTM", M3, results),
+  Bagged_DOTM = process_model("bagged_dotm_anua", "Bagged_DOTM", M3, results)
+)
+
+# MSIS medio
+results_list
 ```
 
 
-
-### \textit{Bagged} OTM
+## Frequência Mensal
 
 ```{r}
-lo <- matrix(NA, nrow=3003, ncol=18)
-hi <- matrix(NA, nrow=3003, ncol=18)
-obs = matrix(NA, nrow=3003, ncol=18) #matrix of the out-sample values
+# Process the model type and calculate coverage rates
+process_model <- function(model_key, label, M3, results, n_rows = 3003, n_cols = 18) {
+  lo <- matrix(NA, nrow = n_rows, ncol = n_cols)
+  hi <- matrix(NA, nrow = n_rows, ncol = n_cols)
+  obs <- matrix(NA, nrow = n_rows, ncol = n_cols)
+  msis_vec <- c()
+  c <- 1
 
-coverage_rates <- c()
-for(i in 1:3003){
-  x=M3[[i]]$x
-  h=M3[[i]]$h
-  obs[i, 1:h] = M3[[i]]$xx
-  lo[i, 1:h] = out_bagged_otm[[i]]$lower[, 3] #.95 interval
-  hi[i, 1:h] = out_bagged_otm[[i]]$upper[, 3] #.95 interval
-  
-  coverage_rates <- c(
-    coverage_rates,
-    calculate_coverage_rate(obs[i, 1:h], lo[i, 1:h], hi[i, 1:h])
-  )
+  for (i in 1:n_rows) {
+    x <- M3[[i]]$x
+    h <- M3[[i]]$h
+    if (M3[[i]]$period == "MONTHLY") {
+      snaive_forecast <- snaive(x, h = h)$mean
+      obs[i, 1:h] <- M3[[i]]$xx
+      scale = mean(abs(snaive_forecast - obs[i, 1:h]))
+      lo[i, 1:h] <- results[[model_key]][[c]]$lower[, 3] # 95% interval
+      hi[i, 1:h] <- results[[model_key]][[c]]$upper[, 3]
+      c <- c + 1
+      msis_vec <- c(
+        msis_vec,
+        msis(obs[i, 1:h], lo[i, 1:h], hi[i, 1:h], scale = scale, alpha=0.05)
+      )
+    }
+  }
+  return(mean(msis_vec))
 }
 
-results <- evaluate_coverage_rates(coverage_rates)
+# Process each model and store the results
+results_list <- list(
+  STM = process_model("stm_mens", "STM", M3, results),
+  OTM = process_model("otm_mens", "OTM", M3, results),
+  DSTM = process_model("dstm_mens", "DSTM", M3, results),
+  DOTM = process_model("dotm_mens", "DOTM", M3, results)
+)
 
-results$summary
+results_list
 ```
 
-### \textit{Bagged} DSTM
-
 ```{r}
-lo <- matrix(NA, nrow=3003, ncol=18)
-hi <- matrix(NA, nrow=3003, ncol=18)
-obs = matrix(NA, nrow=3003, ncol=18) #matrix of the out-sample values
+results_list <- list(
+  Bagged_STM = process_model("bagged_stm_mens", "Bagged_STM", M3, results),
+  Bagged_OTM = process_model("bagged_otm_mens", "Bagged_OTM", M3, results),
+  Bagged_DSTM = process_model("bagged_dstm_mens", "Bagged_DSTM", M3, results),
+  Bagged_DOTM = process_model("bagged_dotm_mens", "Bagged_DOTM", M3, results)
+)
 
-coverage_rates <- c()
-for(i in 1:3003){
-  x=M3[[i]]$x
-  h=M3[[i]]$h
-  obs[i, 1:h] = M3[[i]]$xx
-  lo[i, 1:h] = out_bagged_dstm[[i]]$lower[, 3] #.95 interval
-  hi[i, 1:h] = out_bagged_dstm[[i]]$upper[, 3] #.95 interval
-  
-  coverage_rates <- c(
-    coverage_rates,
-    calculate_coverage_rate(obs[i, 1:h], lo[i, 1:h], hi[i, 1:h])
-  )
-}
 
-results <- evaluate_coverage_rates(coverage_rates)
-
-results$summary
+# MSIS medio
+results_list
 ```
 
-### \textit{Bagged} DOTM
+## Frequência Trimestral
 
 ```{r}
-lo <- matrix(NA, nrow=3003, ncol=18)
-hi <- matrix(NA, nrow=3003, ncol=18)
-obs = matrix(NA, nrow=3003, ncol=18) #matrix of the out-sample values
+# Process the model type and calculate coverage rates
+process_model <- function(model_key, label, M3, results, n_rows = 3003, n_cols = 18) {
+  lo <- matrix(NA, nrow = n_rows, ncol = n_cols)
+  hi <- matrix(NA, nrow = n_rows, ncol = n_cols)
+  obs <- matrix(NA, nrow = n_rows, ncol = n_cols)
+  msis_vec <- c()
+  c <- 1
 
-coverage_rates <- c()
-for(i in 1:3003){
-  x=M3[[i]]$x
-  h=M3[[i]]$h
-  obs[i, 1:h] = M3[[i]]$xx
-  lo[i, 1:h] = out_bagged_dotm[[i]]$lower[, 3] #.95 interval
-  hi[i, 1:h] = out_bagged_dotm[[i]]$upper[, 3] #.95 interval
-  
-  coverage_rates <- c(
-    coverage_rates,
-    calculate_coverage_rate(obs[i, 1:h], lo[i, 1:h], hi[i, 1:h])
-  )
+  for (i in 1:n_rows) {
+    x <- M3[[i]]$x
+    h <- M3[[i]]$h
+    if (M3[[i]]$period == "QUARTERLY") {
+      snaive_forecast <- snaive(x, h = h)$mean
+      obs[i, 1:h] <- M3[[i]]$xx
+      scale = mean(abs(snaive_forecast - obs[i, 1:h]))
+      lo[i, 1:h] <- results[[model_key]][[c]]$lower[, 3] # 95% interval
+      hi[i, 1:h] <- results[[model_key]][[c]]$upper[, 3]
+      c <- c + 1
+      msis_vec <- c(
+        msis_vec,
+        msis(obs[i, 1:h], lo[i, 1:h], hi[i, 1:h], scale = scale, alpha=0.05)
+      )
+    }
+  }
+  return(mean(msis_vec))
 }
 
-results <- evaluate_coverage_rates(coverage_rates)
+# Process each model and store the results
+results_list <- list(
+  STM = process_model("stm_trim", "STM", M3, results),
+  OTM = process_model("otm_trim", "OTM", M3, results),
+  DSTM = process_model("dstm_trim", "DSTM", M3, results),
+  DOTM = process_model("dotm_trim", "DOTM", M3, results)
+)
 
-results$summary
+# MSIS medio
+results_list
+```
+
+```{r}
+results_list <- list(
+  Bagged_STM = process_model("bagged_stm_trim", "Bagged_STM", M3, results),
+  Bagged_OTM = process_model("bagged_otm_trim", "Bagged_OTM", M3, results),
+  Bagged_DSTM = process_model("bagged_dstm_trim", "Bagged_DSTM", M3, results),
+  Bagged_DOTM = process_model("bagged_dotm_trim", "Bagged_DOTM", M3, results)
+)
+
+
+# MSIS medio
+results_list
+```
+
+## Demais Frequências
+
+```{r}
+# Process the model type and calculate coverage rates
+process_model <- function(model_key, label, M3, results, n_rows = 3003, n_cols = 18) {
+  lo <- matrix(NA, nrow = n_rows, ncol = n_cols)
+  hi <- matrix(NA, nrow = n_rows, ncol = n_cols)
+  obs <- matrix(NA, nrow = n_rows, ncol = n_cols)
+  msis_vec <- c()
+  c <- 1
+
+  for (i in 1:n_rows) {
+    x <- M3[[i]]$x
+    h <- M3[[i]]$h
+    if (M3[[i]]$period == "OTHER") {
+      snaive_forecast <- snaive(x, h = h)$mean
+      obs[i, 1:h] <- M3[[i]]$xx
+      scale = mean(abs(snaive_forecast - obs[i, 1:h]))
+      lo[i, 1:h] <- results[[model_key]][[c]]$lower[, 3] # 95% interval
+      hi[i, 1:h] <- results[[model_key]][[c]]$upper[, 3]
+      c <- c + 1
+      msis_vec <- c(
+        msis_vec,
+        msis(obs[i, 1:h], lo[i, 1:h], hi[i, 1:h], scale = scale, alpha=0.05)
+      )
+    }
+  }
+  return(mean(msis_vec))
+}
+
+# Process each model and store the results
+results_list <- list(
+  STM = process_model("stm_outr", "STM", M3, results),
+  OTM = process_model("otm_outr", "OTM", M3, results),
+  DSTM = process_model("dstm_outr", "DSTM", M3, results),
+  DOTM = process_model("dotm_outr", "DOTM", M3, results)
+)
+
+# MSIS medio
+results_list
+```
+
+```{r}
+results_list <- list(
+  Bagged_STM = process_model("bagged_stm_outr", "Bagged_STM", M3, results),
+  Bagged_OTM = process_model("bagged_otm_outr", "Bagged_OTM", M3, results),
+  Bagged_DSTM = process_model("bagged_dstm_outr", "Bagged_DSTM", M3, results),
+  Bagged_DOTM = process_model("bagged_dotm_outr", "Bagged_DOTM", M3, results)
+)
+
+
+# MSIS medio
+results_list
 ```

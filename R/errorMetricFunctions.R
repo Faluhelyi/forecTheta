@@ -81,7 +81,7 @@ calculate_coverage_rate <- function(actual_values, lower_bounds, upper_bounds) {
 #' @param lower A numeric vector of lower bounds of the prediction intervals.
 #' @param upper A numeric vector of upper bounds of the prediction intervals.
 #' @param scale A numeric value for scaling, typically based on the mean absolute 
-#'              error of a naive forecast over a training period.
+#'              error of a seasonal naive forecast over a training period.
 #' @param alpha A numeric value for the significance level of the interval (default is 0.05).
 #'
 #' @return A single numeric value representing the MSIS.
@@ -142,17 +142,22 @@ acd <- function(actual, lower, upper, alpha = 0.05) {
 #' It computes summary statistics and generates a creative visualization of the distribution of coverage rates.
 #'
 #' @param coverage_rates A numeric vector containing the coverage rates for all time series.
+#' @param str_model A string to include in the title of the visualization.
 #' @return A list containing summary statistics (mean, median, standard deviation) and a visualization.
 #' @examples
 #' # Example usage
 #' set.seed(123)
 #' coverage_rates <- runif(3003, 0.8, 1) # Simulated coverage rates
-#' result <- evaluate_coverage_rates(coverage_rates)
+#' result <- evaluate_coverage_rates(coverage_rates, str_model = "Example Parameter")
 #' print(result$summary)
 #' @export
-evaluate_coverage_rates <- function(coverage_rates) {
+evaluate_coverage_rates <- function(coverage_rates, str_model) {
   if (!is.numeric(coverage_rates)) {
     stop("The input coverage_rates must be a numeric vector.")
+  }
+  
+  if (!is.character(str_model) || length(str_model) != 1) {
+    stop("The input str_model must be a single string.")
   }
   
   summary_stats <- list(
@@ -179,7 +184,7 @@ evaluate_coverage_rates <- function(coverage_rates) {
     geom_vline(aes(xintercept = summary_stats$median),
                color = "green", linetype = "dashed", size = 1) +
     labs(
-      title = "Distribution of Coverage Rates Across Time Series",
+      title = paste("Dist. by", str_model),
       subtitle = paste0("Mean: ", round(summary_stats$mean, 2), 
                         ", Median: ", round(summary_stats$median, 2)),
       x = "Coverage Rate",
@@ -187,7 +192,7 @@ evaluate_coverage_rates <- function(coverage_rates) {
     ) +
     theme_minimal()
   
-  print(coverage_plot)
+  #print(coverage_plot)
   
   return(list(
     summary = summary_stats,
