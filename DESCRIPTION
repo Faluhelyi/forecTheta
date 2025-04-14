@@ -16,3 +16,6 @@ Authors@R: c(
 BugReports: https://github.com/jafiorucci/forecTheta/issues
 URL: https://www.sciencedirect.com/science/article/pii/S0169207016300243
 RoxygenNote: 7.3.2
+Suggests: 
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3
