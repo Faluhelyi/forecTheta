@@ -1,4 +1,8 @@
-importFrom("stats", "acf","as.ts","decompose","end","frequency","is.ts","lm","median","start","time","ts","lsfit","optim","quantile","rnorm","sd","shapiro.test","window")
+importFrom(
+  "stats", "acf","as.ts","decompose","end","frequency","is.ts","lm","median",
+  "start","time","ts","lsfit","optim","quantile","rnorm","sd","shapiro.test",
+  "window"
+)
 
 importFrom("utils", "tail")
 
@@ -8,13 +12,16 @@ importFrom("parallel","mclapply")
 
 importFrom("foreach","%do%","foreach")
 
-importFrom("forecast","snaive", "mstl", "BoxCox.lambda", "BoxCox", "InvBoxCox", "bld.mbb.bootstrap")
+importFrom(
+  "forecast","snaive", "mstl", "BoxCox.lambda", "BoxCox", "InvBoxCox",
+  "bld.mbb.bootstrap"
+)
 
 importFrom("tseries","terasvirta.test", "kpss.test")
 
 export(dotm, dstm, otm, stm, expSmoot, otm.arxiv, stheta, plot.thetaModel, groe,
        fixOrig, rolOrig,  errorMetric, bagged_dotm, bagged_dstm, bagged_otm,
-       bagged_stm)
+       bagged_stm, seasonal_test, PI_eval)
 
 S3method(plot, thetaModel)
 S3method(print, thetaModel)
