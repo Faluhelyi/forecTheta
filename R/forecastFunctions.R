@@ -16,6 +16,7 @@
 #' seasonal_test(AirPassengers)
 #' seasonal_test(AirPassengers, "unit")
 #' }
+#' @export
 seasonal_test = function(y, s_test = c("default","unit_root")){
 
   fq = frequency(y)
@@ -867,6 +868,7 @@ stheta <- function (y, h=5, s_type="multiplicative", s_test="default")
 
 ################################################################################
 
+#' @export
 print.thetaModel <- function(x,...){
 
 	cat(paste("Forecast method:", x$method, "\n\n"))
@@ -916,6 +918,7 @@ print.thetaModel <- function(x,...){
 
 }
 
+#' @export
 summary.thetaModel <- function(object,...){
 
 	out = list()
@@ -968,6 +971,7 @@ summary.thetaModel <- function(object,...){
 	return(structure(out,class="summ"))
 }
 
+#' @export
 print.summ <- function(x,...){
 	cat(paste("Forecast method:", x$method, "\n\n"))
 
@@ -1001,6 +1005,7 @@ print.summ <- function(x,...){
 	}
 }
 
+#' @export
 plot.thetaModel <- function(x, ylim=NULL, xlim=NULL, ylab=NULL, xlab=NULL, main=NULL,...){
 	h = length(x$mean)
 	time_y = time(x$y)
