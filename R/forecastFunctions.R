@@ -80,7 +80,7 @@ twoTL <- function(y, h, level,
                   s_test, ## s_test = c("default","unit_root",TRUE, FALSE)
                   par_ini, estimation, lower, upper, opt.method, dynamic, xreg=NULL,
                   lambda=NULL,   ## parameter of Box-Cox transformation,
-                  nSample=2000   ## used to compute bootstrap prediction intervals
+                  nSample=10000   ## used to compute bootstrap prediction intervals
                   )
   {
 
@@ -383,7 +383,7 @@ twoTL <- function(y, h, level,
 }
 
 
-################################################################################
+######### Theta Models #########################################################
 ## models of
 ## Fiorucci J.A., Pellegrini T.R., Louzada F., Petropoulos F.,  Koehler, A.
 ## (2016). Models for optimising the theta method and their relationship to
@@ -475,7 +475,7 @@ bagged_twoTL <- function(y, h, level,
                         )
 {
 
-  nSample = 2000
+  nSample = 10000
   y_bagged = list(y)
   if(num_bootstrap > 1 ){
     y_bagged = bld.mbb.bootstrap(y, num=num_bootstrap)

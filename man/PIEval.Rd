@@ -47,8 +47,11 @@ Makridakis, S., Spiliotis, E. and Assimakopoulos, V. (2018). The M4 Competition:
 Jose Augusto Fiorucci, Francisco Louzada, Igor De Oliveira Barros Faluhelyi.
 }
 \seealso{
-\code{\link[forecTheta]{forecTheta-package}}, \code{\link[forecTheta]{dotm}},
-\code{\link[forecTheta]{dstm}}, \code{\link[forecTheta]{otm}},
+\code{\link[forecTheta]{forecTheta-package}},
+\code{\link[forecTheta]{errorMetricFunctions}},
+\code{\link[forecTheta]{dotm}},
+\code{\link[forecTheta]{dstm}},
+\code{\link[forecTheta]{otm}},
 \code{\link[forecTheta]{stm}}
 }
 \examples{

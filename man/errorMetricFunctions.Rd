@@ -74,7 +74,7 @@
 
 	%% ~Make other sections like Warning with \section{Warning }{....} ~
 \seealso{
-	\code{\link[forecTheta]{forecTheta-package}}, \code{\link[forecTheta]{groe}}
+	\code{\link[forecTheta]{forecTheta-package}}, \code{\link[forecTheta]{PIEval}}, \code{\link[forecTheta]{groe}}
 	%%~~objects to See Also as \code{\link{help}}, ~~~
 }
 \examples{

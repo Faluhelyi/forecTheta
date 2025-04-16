@@ -18,8 +18,8 @@ for the DOTM, DSTM, OTM and STM models.
 	\tabular{ll}{
 		Package: \tab forecTheta\cr
 		Type: \tab Package\cr
-		Version: \tab 2.7.4\cr
-		Date: \tab 2024-11-19\cr
+		Version: \tab 2.7\cr
+		Date: \tab 2025-04-16\cr
 		License: \tab GPL (>=2.0) \cr
 	}
 
@@ -32,6 +32,8 @@ for the DOTM, DSTM, OTM and STM models.
 	\code{stheta(y, h)}
 
 	\code{errorMetric(obs, forec, type = "sAPE", statistic = "M")}
+
+	\code{PI_eval(obs, forec, lower_bounds, upper_bounds, name = c("MSIS", "ACD"), alpha = 0.05)}
 
 	\code{groe(y, forecFunction = ses, g = "sAPE", n1 = length(y)-10)}
 }
@@ -49,6 +51,8 @@ for the DOTM, DSTM, OTM and STM models.
 	Fiorucci J.A., Pellegrini T.R., Louzada F., Petropoulos F., Koehler, A. (2016). \emph{Models for optimising the theta method and their relationship to state space models},	International Journal of Forecasting, 32 (4), 1151--1161, <doi:10.1016/j.ijforecast.2016.02.005>.
 
 	Fioruci J.A., Pellegrini T.R., Louzada F., Petropoulos F. (2015). \emph{The Optimised Theta Method}. arXiv preprint, arXiv:1503.03529.
+
+	Gneiting, T. and Raftery, A.E. (2007). Strictly proper scoring rules, prediction, and estimation. Journal of the American Statistical Association 102 (477), 359--378, \doi{10.1198/016214506000001437}.
 
 	Tashman, L.J. (2000). \emph{Out-of-sample tests of forecasting accuracy: an analysis and review}. International Journal of Forecasting, 16 (4), 437--450, <doi:10.1016/S0169-2070(00)00065-0>.
 	%%~~ Literature or other references for background information ~~

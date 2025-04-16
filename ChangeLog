@@ -1,14 +1,10 @@
 
-Version 2.7.4 (19/11/2024)
+Version 2.7 (16/04/2025)
+  * included MSIS and ACD matrics for prection interval evaluations
+  * included unit test for the package
   * included bagged functions
-
-Version 2.7.3 (09/11/2024)
   * included bagging
-
-Version 2.7.2 (06 Nov 2024)
   * included BoxCox transformation
-
-Version 2.7.1 (05 Nov 2024)
   * included STL decomposition for seasonal time series
   * included option for check unit root before seasonal test
 
