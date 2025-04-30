@@ -1,5 +1,5 @@
 
-Version 2.7 (16 Apr 2025)
+Version 3.0 (30 Apr 2025)
   * included MSIS and ACD metrics for prediction interval evaluation
   * included unit tests for the package
   * included bagged functions

@@ -18,8 +18,8 @@ for the DOTM, DSTM, OTM and STM models.
 	\tabular{ll}{
 		Package: \tab forecTheta\cr
 		Type: \tab Package\cr
-		Version: \tab 2.7\cr
-		Date: \tab 2025-04-16\cr
+		Version: \tab 3.0\cr
+		Date: \tab 2025-04-30\cr
 		License: \tab GPL (>=2.0) \cr
 	}
 
