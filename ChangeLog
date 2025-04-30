@@ -1,7 +1,7 @@
 
-Version 2.7 (16/04/2025)
-  * included MSIS and ACD matrics for prection interval evaluations
-  * included unit test for the package
+Version 2.7 (16 Apr 2025)
+  * included MSIS and ACD metrics for prediction interval evaluation
+  * included unit tests for the package
   * included bagged functions
   * included bagging
   * included BoxCox transformation
