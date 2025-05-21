@@ -20,24 +20,24 @@
 dotm(y, h=5, level=c(80,90,95),	s_type="multiplicative", s_test="default",
   	lambda=NULL, par_ini=c(y[1]/2, 0.5, 2),	estimation=TRUE,
   	lower=c(-1e+10, 0.1, 1.0), upper=c(1e+10, 0.99, 1e+10),
-  	opt.method="Nelder-Mead", xreg=NULL)
+  	opt.method="Nelder-Mead", xreg=NULL, s=NULL)
 
 dstm(y, h=5, level=c(80,90,95), s_type="multiplicative", s_test="default",
   	lambda=NULL, par_ini=c(y[1]/2, 0.5), estimation=TRUE,
   	lower=c(-1e+10, 0.1), upper=c(1e+10, 0.99),
-  	opt.method="Nelder-Mead", xreg=NULL)
+  	opt.method="Nelder-Mead", xreg=NULL, s=NULL)
 
 otm(y, h=5, level=c(80,90,95), s_type="multiplicative", s_test="default",
   	lambda=NULL, par_ini=c(y[1]/2, 0.5, 2), estimation=TRUE,
   	lower=c(-1e+10, 0.1, 1.0), upper=c(1e+10, 0.99, 1e+10),
-  	opt.method="Nelder-Mead", xreg=NULL)
+  	opt.method="Nelder-Mead", xreg=NULL, s=NULL)
 
 stm(y, h=5, level=c(80,90,95), s_type="multiplicative", s_test="default",
   	lambda=NULL, par_ini=c(y[1]/2, 0.5), estimation=TRUE,
   	lower=c(-1e+10, 0.1), upper=c(1e+10, 0.99),
-  	opt.method="Nelder-Mead", xreg=NULL)
+  	opt.method="Nelder-Mead", xreg=NULL, s=NULL)
 
-stheta(y, h=5, s_type="multiplicative", s_test="default")
+stheta(y, h=5, s_type="multiplicative", s_test="default", s=NULL)
 }
 
 \arguments{
@@ -86,6 +86,9 @@ stheta(y, h=5, s_type="multiplicative", s_test="default")
 	}
 	\item{xreg}{
 		A matrix with the regressor variables including the out-of-sample data.
+	}
+	\item{s}{
+		The argument \code{s} is deprecated and has been replaced by \code{s_type} and \code{s_test} for improved functionality and clarity. While \code{s} is still supported in this version for backward compatibility, it may be removed in future releases. Users are strongly encouraged to update their code accordingly.
 	}
 
 }

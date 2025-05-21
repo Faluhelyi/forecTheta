@@ -1,5 +1,5 @@
 
-Version 3.0 (30 Apr 2025)
+Version 3.0 (20 may 2025)
   * included MSIS and ACD metrics for prediction interval evaluation
   * included unit tests for the package
   * included bagged functions
@@ -7,6 +7,7 @@ Version 3.0 (30 Apr 2025)
   * included BoxCox transformation
   * included STL decomposition for seasonal time series
   * included option for check unit root before seasonal test
+  * fixed problem with reverse depends
 
 Version 2.6 (11 Nov 2022)
 	* fixed a problem in BugReports

@@ -9,8 +9,9 @@
 #' Fiorucci J.A., Pellegrini T.R., Louzada F., Petropoulos F., Koehler, A. (2016). Models for optimising the theta method and their relationship to state space models, International Journal of Forecasting, 32 (4), 1151–1161, <doi:10.1016/j.ijforecast.2016.02.005>.
 #' Assimakopoulos, V. and Nikolopoulos k. (2000). The theta model: a decomposition approach to forecasting. International Journal of Forecasting 16, 4, 521–530, <doi:10.1016/S0169-2070(00)00066-2>.
 #' @details
-#' By default, the 90% significance seasonal Z-test, used by Assimakopoulos and Nikolopoulos (2000), is applied for quarterly and monthly time series.
-#' The possibility of first checking the unit root was included because it was pointed out that this test presents many flaws for time series with this characteristic (Fiorucci et al, 2016)). In this case, the KPSS test is performed with a significance level of 5% and in the case of a unit root, then the series is differentiated before checking for seasonal behavior.
+#' By default, the 90\% significance seasonal Z-test, used by Assimakopoulos and Nikolopoulos (2000), is applied for quarterly and monthly time series.
+#' The possibility of first checking the unit root was included because it was pointed out that this test presents many flaws for time series with this characteristic (Fiorucci et al, 2016)).
+#' In this case, the KPSS test is performed with a significance level of 5\% and in the case of a unit root, then the series is differentiated before checking for seasonal behavior.
 #' @examples
 #' \donttest{
 #' seasonal_test(AirPassengers)
@@ -80,13 +81,25 @@ twoTL <- function(y, h, level,
                   s_test, ## s_test = c("default","unit_root",TRUE, FALSE)
                   par_ini, estimation, lower, upper, opt.method, dynamic, xreg=NULL,
                   lambda=NULL,   ## parameter of Box-Cox transformation,
-                  nSample=10000   ## used to compute bootstrap prediction intervals
+                  nSample=10000,   ## used to compute bootstrap prediction intervals,
+                  s = NULL  ## deprecated argument
                   )
   {
 
 	if(!is.ts(y)){ stop("ERROR in twoTL function: y must be an object of time series class."); }
 	if(!is.numeric(h)){	stop("ERROR in twoTL function: h must be a positive integer number.");}
 	if( any(par_ini < lower) ||  any(par_ini > upper) ){stop("ERROR in twoTL function: par_ini out of range.");}
+
+  # Conversion of deprecated argument to new arguments.
+  if(!is.null(s)){
+    if(is.logical(s)){
+      s_test = s
+    }else{
+      if (s == "additive"){
+        s_type = "additive"
+      }
+    }
+  }
 
 	n = length(y)
 	fq = frequency(y)
@@ -394,12 +407,12 @@ dotm <- function(y, h=5, level=c(80,90,95),
                  s_test="default",
                  lambda=NULL, par_ini=c(y[1]/2, 0.5, 2), estimation=TRUE,
                  lower=c(-1e+10, 0.1, 1.0), upper=c(1e+10, 0.99, 1e+10),
-                 opt.method="Nelder-Mead", xreg=NULL ){
+                 opt.method="Nelder-Mead", xreg=NULL, s=NULL ){
 
   out =  twoTL( y=y, h=h, level=level,
                 s_type=s_type, s_test=s_test, par_ini=par_ini,
                 estimation=estimation, lower=lower, upper=upper, opt.method=opt.method,
-                dynamic=TRUE, xreg=xreg, lambda=lambda)
+                dynamic=TRUE, xreg=xreg, lambda=lambda, s=s)
 
   out$method = "Dynamic Optimised Theta Model"
 
@@ -410,12 +423,13 @@ dstm <- function(y, h=5, level=c(80,90,95),
                  s_type="multiplicative", s_test="default",
                  lambda=NULL, par_ini=c(y[1]/2, 0.5),estimation=TRUE,
                  lower=c(-1e+10, 0.1), upper=c(1e+10, 0.99),
-                 opt.method="Nelder-Mead", xreg=NULL){
+                 opt.method="Nelder-Mead", xreg=NULL,
+                 s=NULL){
 
   out =  twoTL( y=y, h=h, level=level,
                 s_type=s_type, s_test=s_test, par_ini=c(par_ini,2.0),
                 estimation=estimation, lower=c(lower, 1.99999), upper=c(upper, 2.00001),
-                opt.method=opt.method, dynamic=TRUE, xreg=xreg, lambda=lambda)
+                opt.method=opt.method, dynamic=TRUE, xreg=xreg, lambda=lambda, s=s)
 
   out$method = "Dynamic Standard Theta Model"
   out$par = as.matrix(out$par[c('ell0','alpha'),])
@@ -429,13 +443,13 @@ otm <- function(y, h=5, level=c(80,90,95),
                 s_type="multiplicative", s_test="default",
                 lambda=NULL, par_ini=c(y[1]/2, 0.5, 2.0), estimation=TRUE,
                 lower=c(-1e+10, 0.1, 1.0), upper=c(1e+10, 0.99, 1e+10),
-                opt.method="Nelder-Mead", xreg=NULL){
+                opt.method="Nelder-Mead", xreg=NULL, s=NULL){
 
   out = twoTL( y=y, h=h, level=level,
                s_type=s_type, s_test=s_test,
                par_ini=par_ini, estimation=estimation, lower=lower,
                upper=upper, opt.method=opt.method, dynamic=FALSE, xreg=xreg,
-               lambda=lambda)
+               lambda=lambda, s=s)
 
   out$method = "Optimised Theta Model"
 
@@ -446,13 +460,14 @@ stm <- function(y, h=5, level=c(80,90,95),
                 s_type="multiplicative", s_test="default",
                 lambda=NULL, par_ini=c(y[1]/2, 0.5), estimation=TRUE,
                 lower=c(-1e+10, 0.1), upper=c(1e+10, 0.99),
-                opt.method="Nelder-Mead", xreg=NULL){
+                opt.method="Nelder-Mead", xreg=NULL, s=NULL){
 
   out = twoTL( y=y, h=h, level=level,
                s_type=s_type, s_test=s_test,
                par_ini=c(par_ini,2.0), estimation=estimation,
                lower=c(lower,1.99999), upper=c(upper,2.00001),
-               opt.method=opt.method, dynamic=FALSE, xreg=xreg, lambda=lambda)
+               opt.method=opt.method, dynamic=FALSE, xreg=xreg, lambda=lambda,
+               s=s)
 
   out$method = "Standard Theta Model"
   out$par = as.matrix(out$par[c('ell0','alpha'),])
@@ -471,7 +486,7 @@ bagged_twoTL <- function(y, h, level,
                         s_type, ## s_type = c("additive","multiplicative","stl")
                         s_test, ## s_test = c("default","unit_root",TRUE, FALSE)
                         par_ini, estimation, lower, upper, opt.method, dynamic, xreg=NULL,
-                        lambda=NULL   ## parameter of Box-Cox transformation
+                        lambda=NULL  ## parameter of Box-Cox transformation
                         )
 {
 
@@ -807,17 +822,28 @@ otm.arxiv <- function( y, h=5, s=NULL, theta=NULL, tLineExtrap=expSmoot, g="sAPE
 }
 
 
-stheta <- function (y, h=5, s_type="multiplicative", s_test="default")
+stheta <- function (y, h=5, s_type="multiplicative", s_test="default", s=NULL)
 {
 	if(!is.ts(y)){ stop("ERROR in stheta function: y must be a object of time series class."); }
 	if(!is.numeric(h)){	stop("ERROR in stheta function: h must be a positive integer number.");}
+
+  # Conversion of deprecated argument to new arguments.
+  if(!is.null(s)){
+    if(is.logical(s)){
+      s_test = s
+    }else{
+      if (s == "additive"){
+        s_type = "additive"
+      }
+    }
+  }
 
 	n = length(y)
 	fq = frequency(y)
 	time_y = time(y)
 	time_forec = time_y[n] + (1:h)/fq
-	s_type = 'multiplicative'
-	s_test = "default"
+	#s_type = 'multiplicative'
+	#s_test = "default"
 
 	x=y
 

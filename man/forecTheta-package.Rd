@@ -7,11 +7,7 @@
 	%%~~ package title ~~
 }
 \description{
-In this package we implement functions for forecast univariate time series using
-the several Theta Models
-of Assimakopoulos and Nikolopoulos (2000) and Fiorucci et al (2016).
-In this version, we also included bagging implementations (Bergmeir et al, 2016)
-for the DOTM, DSTM, OTM and STM models.
+This package provides functions for forecasting univariate time series using several Theta models, originally proposed by Assimakopoulos and Nikolopoulos (2000) and later extended by Fiorucci et al. (2016). This version also includes implementations of bagging methods, based on the work of Bergmeir et al. (2016), applied to the DOTM, DSTM, OTM, and STM models.
 	%%~~ A concise (1-5 lines) description of the package ~~
 }
 \details{
@@ -19,7 +15,7 @@ for the DOTM, DSTM, OTM and STM models.
 		Package: \tab forecTheta\cr
 		Type: \tab Package\cr
 		Version: \tab 3.0\cr
-		Date: \tab 2025-04-30\cr
+		Date: \tab 2025-05-20\cr
 		License: \tab GPL (>=2.0) \cr
 	}
 

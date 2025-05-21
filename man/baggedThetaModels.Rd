@@ -138,19 +138,14 @@ Fiorucci J.A., Pellegrini T.R., Louzada F., Petropoulos F., Koehler, A. (2016). 
 
 \examples{
 
-y1 = 2+ 0.15*(1:20) + rnorm(20)
-y2 = y1[20]+ 0.3*(1:30) + rnorm(30)
-y =  as.ts(c(y1,y2))
-out <- dotm(y, h=10)
+
+#### additive seasonal decomposition ###
+x = sin(2*pi*seq(0,9,len=300)) + exp((1:300)/150) + rnorm(mean=100,sd=0.5,n=300)
+y = ts(x, frequency=33)
+out <- bagged_dotm(y, h=50, s_type='additive', num_bootstrap = 5)
 summary(out)
 plot(out)
 
-#### additive seasonal decomposition ###
-x = sin(2*pi*seq(0,9,len=300)) + exp((1:300)/150) + rnorm(mean=0,sd=0.5,n=300)
-y = ts(x, frequency=33)
-out <- dotm(y, h=50, s_type='additive')
-summary(out)
-plot(out)
 
 }
 
