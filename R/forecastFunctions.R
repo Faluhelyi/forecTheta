@@ -71,6 +71,59 @@ bootstrap_quantiles <- function( bs_series, level ){
   return( quantiles )
 }
 
+initial_seasonal_component <- function(y, m = NULL, type = c("additive", "multiplicative", "stl"), nyears = 3) {
+  type <- match.arg(type)
+  if (type == "stl") type <- "additive"  # Treat STL as additive decomposition
+
+  # Handle seasonal frequency
+  if (inherits(y, "ts")) {
+    if (is.null(m)) m <- frequency(y)
+    y <- as.numeric(y)
+  } else {
+    if (is.null(m)) stop("You must provide 'm' (seasonal frequency) when 'y' is not a 'ts' object.")
+  }
+
+  n <- length(y)
+
+  # Ensure nyears is not too large for the series length
+  max_nyears <- floor(n / m)
+  if (max_nyears < 1) stop("Not enough data to estimate even one seasonal cycle.")
+  if (nyears > max_nyears) {
+    warning(sprintf("Only %d full seasonal cycle(s) available; using nyears = %d instead of %d.",
+                    max_nyears, max_nyears, nyears))
+    nyears <- max_nyears
+  }
+
+  # Centered moving average of order 2m
+  ma_2m <- stats::filter(y, rep(1/(2*m), 2*m), sides = 2)
+
+  # Second moving average of order 2
+  ft <- stats::filter(ma_2m, rep(1/2, 2), sides = 2)
+
+  # Detrending (additive or multiplicative)
+  if (type == "additive") {
+    detrended <- y - ft
+  } else {
+    detrended <- y / ft
+  }
+
+  # Seasonal indices estimation
+  seasonal_index <- rep(NA, m)
+  for (i in 1:m) {
+    idx <- seq(i, m * nyears, by = m)
+    seasonal_index[i] <- mean(detrended[idx], na.rm = TRUE)
+  }
+
+  # Normalization of seasonal indices
+  if (type == "additive") {
+    seasonal_index <- seasonal_index - mean(seasonal_index, na.rm = TRUE)
+  } else {
+    seasonal_index <- seasonal_index / mean(seasonal_index, na.rm = TRUE)
+  }
+
+  return(seasonal_index)
+}
+
 
 ## par = c(ell0, alpha, theta)
 ## s_type = c("additive","multiplicative","stl")
@@ -395,6 +448,550 @@ twoTL <- function(y, h, level,
 	return(	structure(out,class="thetaModel") )
 }
 
+seasonal_twoTL <- function(y, h, level,
+                  s_type, ## s_type = c("additive","multiplicative","stl")
+                  s_test, ## s_test = c("default","unit_root",TRUE, FALSE)
+                  par_ini, estimation, lower, upper, opt.method, dynamic, xreg=NULL,
+                  lambda=NULL,   ## parameter of Box-Cox transformation,
+                  nSample=10000,   ## used to compute bootstrap prediction intervals,
+                  s = NULL  ## deprecated argument
+)
+{
+
+  if(!is.ts(y)){ stop("ERROR in seasonal_twoTL function: y must be an object of time series class."); }
+  if(!is.numeric(h)){	stop("ERROR in seasonal_twoTL function: h must be a positive integer number.");}
+  if( any(par_ini < lower) ||  any(par_ini > upper) ){stop("ERROR in seasonal_twoTL function: par_ini out of range.");}
+
+  # Conversion of deprecated argument to new arguments.
+  if(!is.null(s)){
+    if(is.logical(s)){
+      s_test = s
+    }else{
+      if (s == "additive"){
+        s_type = "additive"
+      }
+    }
+  }
+
+  n = length(y)
+  fq = frequency(y)
+  time_y = time(y)
+
+  if(!is.null(lambda)){
+    if(lambda == "auto"){
+      lambda = BoxCox.lambda(y, lower=0, upper=1)
+    }
+    y = BoxCox(y, lambda)
+  }
+
+  run_s_decomp = seasonal_test(y, s_test)
+  if( run_s_decomp ){
+    n_params = 5+fq-1
+  }else{
+    n_params = 3
+  }
+
+  if(!is.null(xreg)){
+
+    if(nrow(xreg) != n+h)
+      stop("ERROR: xreg must be a matrix with nrow(xreg) == length(y)+h");
+
+    nreg <- ncol(xreg)
+
+    if(length(par_ini)==n_params)
+      par_ini <- c(par_ini,rep(0, nreg))
+    if(length(lower)==n_params)
+      lower <- c(lower,rep(-1e+100, nreg))
+    if(length(upper)==n_params)
+      upper <- c(upper,rep(1e+100, nreg))
+
+    if(length(par_ini)!=n_params+nreg)
+      stop("ERROR: error in the length of vector par_ini");
+    if(length(lower)!=n_params+nreg)
+      stop("ERROR: error in the length of vector lower");
+    if(length(upper)!=n_params+nreg)
+      stop("ERROR: error in the length of vector upper");
+  }
+
+  #### seasonal test and decomposition ###
+
+
+  if( fq < 3 ){
+    s_type="None";s_type="None";
+  }
+
+  if( run_s_decomp ){
+    s_type = match.arg(arg=s_type, choices=c("additive","multiplicative","stl"))
+
+    if( s_type == "multiplicative" ){
+      y_decomp = decompose(y, type = "multiplicative")$seasonal
+      y_deseasonalized = y/y_decomp
+    }
+
+    if( s_type == "additive" ){
+      y_decomp = decompose(y, type = "additive")$seasonal
+      y_deseasonalized = y- y_decomp
+    }
+
+    if( s_type == "stl" ){
+      y_decomp = mstl(y)[,3]
+      y_deseasonalized = y - y_decomp
+    }
+
+  }else{
+    y_deseasonalized = y
+  }
+  ########################################
+
+  tnnTest.pvalue = terasvirta.test(y_deseasonalized)$p.value
+
+  mu = ell = s_fato = A = B = meanY = numeric(n+h)
+
+  Bn = 6*( 2*mean( (1:n)*y_deseasonalized ) - (1+n)*mean(y_deseasonalized) )/(n^2 -1)
+  An = mean(y_deseasonalized) - (n+1)*Bn/2
+
+  new_y = as.numeric(y)
+
+  # state space model
+  SSM = function(par, computeForec=FALSE){
+    ell0 = par[1]
+    alpha = par[2]
+    theta = par[3]
+
+    if( run_s_decomp ){
+      gamma = par[4]
+      s_init = par[5:(5+fq-1)]
+
+    }else{
+      gamma = 0
+      s_init = rep(0, fq) #par[5:(5+fq-1)]
+
+    }
+
+    if(!is.null(xreg)){
+      reg = par[-(1:n_params)]
+      y_reg  = as.numeric(xreg %*% reg)
+      new_y = as.numeric(y) - y_reg[1:n]
+    }
+
+    if(s_type == "multiplicative"){
+
+      # MUDAR PARA O CASO QUE VEM DO ETS(A, A, M)
+      J_0 = (1-1/theta)*( An + Bn)
+
+      ell[1] = alpha*(new_y[1] - s_init[1]) + (1-alpha)*ell0
+      s_fato[1] = gamma*(new_y[1] - ell0 - J_0) + (1-gamma)*s_init[1]
+      meanY[1] = new_y[1] - s_init[1]
+      if(dynamic){
+        A[1] = new_y[1] - s_init[1]
+        B[1] = 0
+        mu[1] = new_y[1]
+      }else{
+        A[1] = An
+        B[1] = Bn
+        mu[1] = ell0 + J_0 + s_init[1]
+      }
+
+
+      limit = n
+      if(computeForec){
+        limit = n+h
+        new_y = c(new_y, rep(NA,h))
+      }
+
+      for(i in 1:(limit-1)){
+
+        if(i<=(fq-1)){
+
+          J = (1-1/theta)*( A[i]*((1-alpha)^i) + B[i]*(1-(1-alpha)^(i+1))/alpha )
+          mu[i+1] = ell[i] + J + s_init[i+1]
+
+          ell[i+1] = alpha*(new_y[i+1]-s_init[i+1]) + (1-alpha)*ell[i]
+          s_fato[i+1] = gamma*(new_y[i+1] - ell[i] - J) + (1-gamma)*s_init[i+1]
+          meanY[i+1] = (i*meanY[i] + (new_y[i+1] - s_init[i+1]))/(i+1)
+          if(dynamic){
+            B[i+1] = ((i-1)*B[i] +6*((new_y[i+1] - s_init[i+1]) -meanY[i])/(i+1) )/(i+2)
+            A[i+1] = meanY[i+1] - B[i+1]*(i+2)/2
+          }else{
+            A[i+1] = An
+            B[i+1] = Bn
+          }
+
+        }else{
+          J = (1-1/theta)*( A[i]*((1-alpha)^i) + B[i]*(1-(1-alpha)^(i+1))/alpha )
+          mu[i+1] = ell[i] + J + s_fato[i+1-fq]
+          if(i >= n){
+            new_y[i+1] = mu[i+1]
+          }
+          ell[i+1] = alpha*(new_y[i+1]-s_fato[i+1-fq]) + (1-alpha)*ell[i]
+          s_fato[i+1] = gamma*(new_y[i+1] - ell[i] - J) + (1-gamma)*s_fato[i+1-fq]
+          meanY[i+1] = (i*meanY[i] + (new_y[i+1] - s_fato[i+1-fq]))/(i+1)
+          if(dynamic){
+            B[i+1] = ((i-1)*B[i] +6*((new_y[i+1] - s_fato[i+1-fq]) -meanY[i])/(i+1) )/(i+2)
+            A[i+1] = meanY[i+1] - B[i+1]*(i+2)/2
+          }else{
+            A[i+1] = An
+            B[i+1] = Bn
+          }
+
+        }
+      }
+
+    }else{
+
+      J_0 = (1-1/theta)*( An + Bn)
+
+      ell[1] = alpha*(new_y[1] - s_init[1]) + (1-alpha)*ell0
+      s_fato[1] = gamma*(new_y[1] - ell0 - J_0) + (1-gamma)*s_init[1]
+      meanY[1] = new_y[1] - s_init[1]
+      if(dynamic){
+        A[1] = new_y[1] - s_init[1]
+        B[1] = 0
+        mu[1] = new_y[1]
+      }else{
+        A[1] = An
+        B[1] = Bn
+        mu[1] = ell0 + J_0 + s_init[1]
+      }
+
+
+      limit = n
+      if(computeForec){
+        limit = n+h
+        new_y = c(new_y, rep(NA,h))
+      }
+
+      for(i in 1:(limit-1)){
+
+        if(i<=(fq-1)){
+
+          J = (1-1/theta)*( A[i]*((1-alpha)^i) + B[i]*(1-(1-alpha)^(i+1))/alpha )
+          mu[i+1] = ell[i] + J + s_init[i+1]
+
+          ell[i+1] = alpha*(new_y[i+1]-s_init[i+1]) + (1-alpha)*ell[i]
+          s_fato[i+1] = gamma*(new_y[i+1] - ell[i] - J) + (1-gamma)*s_init[i+1]
+          meanY[i+1] = (i*meanY[i] + (new_y[i+1] - s_init[i+1]))/(i+1)
+          if(dynamic){
+            B[i+1] = ((i-1)*B[i] +6*((new_y[i+1] - s_init[i+1]) -meanY[i])/(i+1) )/(i+2)
+            A[i+1] = meanY[i+1] - B[i+1]*(i+2)/2
+          }else{
+            A[i+1] = An
+            B[i+1] = Bn
+          }
+
+        }else{
+          J = (1-1/theta)*( A[i]*((1-alpha)^i) + B[i]*(1-(1-alpha)^(i+1))/alpha )
+          mu[i+1] = ell[i] + J + s_fato[i+1-fq]
+          if(i >= n){
+            new_y[i+1] = mu[i+1]
+          }
+          ell[i+1] = alpha*(new_y[i+1]-s_fato[i+1-fq]) + (1-alpha)*ell[i]
+          s_fato[i+1] = gamma*(new_y[i+1] - ell[i] - J) + (1-gamma)*s_fato[i+1-fq]
+          meanY[i+1] = (i*meanY[i] + (new_y[i+1] - s_fato[i+1-fq]))/(i+1)
+          if(dynamic){
+            B[i+1] = ((i-1)*B[i] +6*((new_y[i+1] - s_fato[i+1-fq]) -meanY[i])/(i+1) )/(i+2)
+            A[i+1] = meanY[i+1] - B[i+1]*(i+2)/2
+          }else{
+            A[i+1] = An
+            B[i+1] = Bn
+          }
+
+        }
+      }
+
+    }
+
+
+    if(!is.null(xreg)){
+      if(computeForec)
+        mu = mu + y_reg
+      else
+        mu[1:n] = mu[1:n] + y_reg[1:n]
+    }
+
+    return( list(mu=mu, ell=ell, s_fato=s_fato, A=A, B=B, meanY=meanY) )
+  }
+
+  cte = mean(abs(y)) ## constante
+
+  # sun of squared error
+  sse = function(par){
+    if( any(par < lower) ||  any(par > upper) ){return(1e+300);}
+    mu = SSM(par)$mu
+    errors = (y[1:n] - mu[1:n]) / cte
+    if(dynamic){
+      return( sum(errors[3:n]^2) )
+    }else{
+      return( sum(errors^2) )
+    }
+  }
+
+  if(estimation){
+    if(opt.method == 'Nelder-Mead')
+      opt = optim( par=par_ini, fn=sse, method="Nelder-Mead" )
+    if(opt.method == 'L-BFGS-B')
+      opt = optim( par=par_ini, fn=sse, method="L-BFGS-B", lower=lower, upper=upper)
+    if(opt.method == 'SANN')
+      opt = optim( par=par_ini, fn=sse, method="SANN")
+
+    par = opt$par
+  }else{
+    par = par_ini
+  }
+
+  out.SSM = SSM(par, computeForec=TRUE)
+  mu = out.SSM$mu
+  Y_fcast = ts(mu[(n+1):(n+h)], start = end(y) + c(0, 1), frequency = frequency(y))
+  Y_fitted = mu[1:n]
+  Y_residuals = y - Y_fitted
+
+  shapTest.pvalue = shapiro.test(Y_residuals[tail(3:n,4999)])$p.value
+
+  matForec.sample = NULL ## initialize
+
+  if(!is.null(level)){
+
+    if(s_type == "multiplicative"){
+
+      #nSample=200
+      level = sort(level)
+      alpha = par[2]
+      theta = par[3]
+
+      #gamma = par[4]
+
+      if( run_s_decomp ){
+        gamma = par[4]
+
+      }else{
+        gamma = 0
+      }
+
+
+      A = out.SSM$A[n]
+
+      B = out.SSM$B[n]
+
+      ell = out.SSM$ell[n]
+
+      s_fato = out.SSM$s_fato[1:n]
+      #s_fato = matrix(rep(s_fato, each = nSample), nrow = nSample, byrow = TRUE)
+      s = matrix(NA, nrow = nSample, ncol = h)
+
+      meanY = mean(y_deseasonalized)
+      sd.error = sd(Y_residuals[3:n])
+      matForec.sample = matrix(NA,nrow=nSample,ncol=h)
+      colnames(matForec.sample) = paste("h=",1:h,sep="")
+      #matForec.sample[,1] = Y_fcast[1] + rnorm(nSample, 0, sd.error)
+      for( i in n:(n+h-1) ){
+
+        if(i<=(n+fq-1)){
+          previous_ell = ell
+          J = (1-1/theta)*( A*((1-alpha)^i) + B*(1-(1-alpha)^(i+1))/alpha )
+
+          matForec.sample[,i+1-n] = previous_ell + J + s_fato[i+1-fq] + rnorm(nSample, 0, sd.error)
+          ell = alpha*(matForec.sample[,i+1-n] - s_fato[i+1-fq]) + (1-alpha)*previous_ell
+          s[,i+1-n] = gamma*(matForec.sample[,i+1-n] - previous_ell - J) + (1-gamma)*s_fato[i+1-fq]
+          meanY = (i*meanY + (matForec.sample[,i+1-n] - s_fato[i+1-fq]))/(i+1)
+          B = ( (i-1)*B +6*((matForec.sample[,i+1-n]-s_fato[i+1-fq]) -meanY)/(i+1) )/(i+2)
+          A = meanY - B*(i+2)/2
+
+        }else{
+          previous_ell = ell
+          J = (1-1/theta)*( A*((1-alpha)^i) + B*(1-(1-alpha)^(i+1))/alpha )
+
+          matForec.sample[,i+1-n] = previous_ell + J + s[, i+1-n-fq] + rnorm(nSample, 0, sd.error)
+          ell = alpha*(matForec.sample[,i+1-n] - s[, i+1-n-fq]) + (1-alpha)*previous_ell
+          s[,i+1-n] = gamma*(matForec.sample[,i+1-n] - previous_ell - J) + (1-gamma)*s[, i+1-n-fq]
+          meanY = (i*meanY + (matForec.sample[,i+1-n] - s[, i+1-n-fq]))/(i+1)
+          B = ( (i-1)*B +6*((matForec.sample[,i+1-n]-s[, i+1-n-fq]) -meanY)/(i+1) )/(i+2)
+          A = meanY - B*(i+2)/2
+
+        }
+
+      }
+
+      # nn = length(level)
+      # qq = (1-0.01*level)/2
+      # probs = numeric(2*nn)
+      # probs[2*(1:nn)-1] = qq
+      # probs[2*(1:nn)] = 1-qq
+      #
+      # quantiles = t( apply(X=matForec.sample, MARGIN=2, FUN=quantile, probs=probs) )
+
+    }else{
+      #nSample=200
+      level = sort(level)
+      alpha = par[2]
+      theta = par[3]
+
+      #gamma = par[4]
+      if( run_s_decomp ){
+        gamma = par[4]
+
+      }else{
+        gamma = 0
+      }
+
+      A = out.SSM$A[n]
+
+      B = out.SSM$B[n]
+
+      ell = out.SSM$ell[n]
+
+      s_fato = out.SSM$s_fato[1:n]
+      #s_fato = matrix(rep(s_fato, each = nSample), nrow = nSample, byrow = TRUE)
+      s = matrix(NA, nrow = nSample, ncol = h)
+
+      meanY = mean(y_deseasonalized)
+      sd.error = sd(Y_residuals[3:n])
+      matForec.sample = matrix(NA,nrow=nSample,ncol=h)
+      colnames(matForec.sample) = paste("h=",1:h,sep="")
+      #matForec.sample[,1] = Y_fcast[1] + rnorm(nSample, 0, sd.error)
+      for( i in n:(n+h-1) ){
+
+        if(i<=(n+fq-1)){
+          previous_ell = ell
+          J = (1-1/theta)*( A*((1-alpha)^i) + B*(1-(1-alpha)^(i+1))/alpha )
+
+          matForec.sample[,i+1-n] = previous_ell + J + s_fato[i+1-fq] + rnorm(nSample, 0, sd.error)
+          ell = alpha*(matForec.sample[,i+1-n] - s_fato[i+1-fq]) + (1-alpha)*previous_ell
+          s[,i+1-n] = gamma*(matForec.sample[,i+1-n] - previous_ell - J) + (1-gamma)*s_fato[i+1-fq]
+          meanY = (i*meanY + (matForec.sample[,i+1-n] - s_fato[i+1-fq]))/(i+1)
+          B = ( (i-1)*B +6*((matForec.sample[,i+1-n]-s_fato[i+1-fq]) -meanY)/(i+1) )/(i+2)
+          A = meanY - B*(i+2)/2
+
+        }else{
+          previous_ell = ell
+          J = (1-1/theta)*( A*((1-alpha)^i) + B*(1-(1-alpha)^(i+1))/alpha )
+
+          matForec.sample[,i+1-n] = previous_ell + J + s[, i+1-n-fq] + rnorm(nSample, 0, sd.error)
+          ell = alpha*(matForec.sample[,i+1-n] - s[, i+1-n-fq]) + (1-alpha)*previous_ell
+          s[,i+1-n] = gamma*(matForec.sample[,i+1-n] - previous_ell - J) + (1-gamma)*s[, i+1-n-fq]
+          meanY = (i*meanY + (matForec.sample[,i+1-n] - s[, i+1-n-fq]))/(i+1)
+          B = ( (i-1)*B +6*((matForec.sample[,i+1-n]-s[, i+1-n-fq]) -meanY)/(i+1) )/(i+2)
+          A = meanY - B*(i+2)/2
+
+        }
+
+      }
+
+      # nn = length(level)
+      # qq = (1-0.01*level)/2
+      # probs = numeric(2*nn)
+      # probs[2*(1:nn)-1] = qq
+      # probs[2*(1:nn)] = 1-qq
+      #
+      # quantiles = t( apply(X=matForec.sample, MARGIN=2, FUN=quantile, probs=probs) )
+
+    }
+
+    ## included in version 2.7.3, it's used to compute bagging forecasts
+    matForec.sample = t( matForec.sample )
+    quantiles = bootstrap_quantiles( bs_series=matForec.sample, level=level )
+    quantiles = ts( quantiles, start = end(y) + c(0, 1), frequency = frequency(y))
+    #colnames(quantiles) = unlist( lapply(X=1:length(level), FUN=function(X) paste(c('Lo','Hi'), level[X]) ) )
+    matForec.sample = ts( matForec.sample , start = end(y) + c(0, 1), frequency = frequency(y) )
+    colnames( matForec.sample ) = paste0( "sample", 1:ncol(matForec.sample) )
+    ##
+
+    if(!is.null(xreg)){
+      reg = par[-(1:n_params)]
+      y_reg  = as.numeric(xreg[-(1:n),] %*% reg)
+      quantiles = quantiles + y_reg
+
+      matForec.sample = matForec.sample + y_reg;
+    }
+
+  }
+
+  if(run_s_decomp){
+    if(s_type == 'multiplicative'){
+      y = y * 1
+      Y_fitted = 1 * Y_fitted
+      #s_forec = snaive(y_decomp, h = h)$mean
+      Y_fcast =  1 * Y_fcast
+      if(!is.null(level)){
+        # for(i in 1:ncol(quantiles)){
+        # 	quantiles[,i] = quantiles[,i] * s_forec
+        # }
+        quantiles = quantiles * replicate( ncol(quantiles), 1 )
+
+        matForec.sample = matForec.sample * replicate( ncol(matForec.sample), 1 )
+      }
+
+    }else{
+      y = y + 0
+      Y_fitted = 0 + Y_fitted
+      #s_forec = snaive(y_decomp, h = h)$mean
+      Y_fcast =  0 + Y_fcast
+      if(!is.null(level)){
+        # for(i in 1:ncol(quantiles)){
+        # 	quantiles[,i] = quantiles[,i] + s_forec
+        # }
+        quantiles = quantiles + replicate( ncol(quantiles), 0 )
+
+        matForec.sample = matForec.sample + replicate( ncol(matForec.sample), 0 )
+      }
+
+    }
+
+    Y_residuals = y - Y_fitted
+  }
+
+  if(!is.null(lambda)){
+    y = InvBoxCox(y, lambda)
+    Y_fcast = InvBoxCox(Y_fcast, lambda)
+    if(!is.null(level)){
+      quantiles = InvBoxCox(quantiles, lambda)
+      matForec.sample =  InvBoxCox(matForec.sample, lambda);
+
+    }
+  }
+
+  if( !run_s_decomp ){
+    par = c(par, 0, rep(0, fq))
+  }
+
+  s_init_names <- paste0("s_{", 1:fq, "-", fq, "}")
+
+  out = list()
+  out$method = "Seasonal Two Theta Lines Model"
+  out$y = y
+  out$s_type = s_type
+  out$s_test = s_test
+  out$opt.method = ifelse(estimation, opt.method, 'none')
+  out$par = matrix(par, ncol=1)
+  out$lambda = lambda
+  if(is.null(xreg)){
+    rownames(out$par) = c('ell0','alpha','theta', 'gamma', s_init_names)
+  }else{
+    rownames(out$par) =c('ell0','alpha','theta','gamma', s_init_names, paste0("p",1:ncol(xreg)))
+  }
+  colnames(out$par) = 'MLE'
+  omega = 1 - 1/par[3]
+  out$weights = matrix( c(omega, 1-omega), ncol=1, nrow=2)
+  rownames(out$weights) = c('omega_1', 'omega_2')
+  colnames(out$weights) = 'Estimative'
+  out$fitted = ts(Y_fitted, start = start(y), frequency = frequency(y))
+  out$residuals = ts(Y_residuals, start = start(y), frequency = frequency(y))
+  out$mean = Y_fcast
+  out$level = level
+  if(!is.null(level)){
+    nn = length(level)
+    out$lower = quantiles[, 2*(1:nn)-1, drop=F]
+    out$upper = quantiles[, 2*(1:nn), drop=F]
+  }else{
+    out$lower = out$upper = NULL
+  }
+  out$matForec.sample = matForec.sample
+  out$tests = matrix(c(tnnTest.pvalue,shapTest.pvalue),nrow=2)
+  rownames(out$tests) = c('tnn-test','shapiro-test')
+  colnames(out$tests) = c('p.value')
+
+  return(	structure(out,class="thetaModel") )
+}
+
 
 ######### Theta Models #########################################################
 ## models of
@@ -476,6 +1073,266 @@ stm <- function(y, h=5, level=c(80,90,95),
   return(out)
 }
 ################################################################################
+
+
+######### Seasonal Theta Models ################################################
+seasonal_dotm <- function(y, h=5, level=c(80,90,95),
+                 s_type="additive", #multiplicative
+                 s_test="default",
+                 lambda=NULL, par_ini=c(y[1]/2, 0.5, 2), estimation=TRUE,
+                 lower=c(-1e+10, 0.1, 1.0), upper=c(1e+10, 0.99, 1e+10),
+                 opt.method="Nelder-Mead", xreg=NULL, s=NULL ){
+
+  if(!is.ts(y)){ stop("ERROR in seasonal_dotm function: y must be an object of time series class."); }
+  if(!is.numeric(h)){	stop("ERROR in seasonal_dotm function: h must be a positive integer number.");}
+
+  # Conversion of deprecated argument to new arguments.
+  if(!is.null(s)){
+    if(is.logical(s)){
+      s_test = s
+    }else{
+      if (s == "additive"){
+        s_type = "additive"
+      }
+    }
+  }
+
+  fq <- frequency(y)
+
+  run_s_decomp = seasonal_test(y, s_test)
+  if( fq < 3 ){
+    s_type="None";s_type="None";
+  }
+
+  if( run_s_decomp ){
+
+    s_type = match.arg(arg=s_type, choices=c("additive","multiplicative","stl"))
+
+    if( s_type == "multiplicative" ){
+      s_ini <- initial_seasonal_component(y=y, m=fq, type = s_type)
+
+      par_ini <- c(par_ini, 0.5, s_ini)
+      lower <- c(lower, 0.1, rep(-1e+10, fq))
+      upper <- c(upper, 0.99, rep(1e+10, fq))
+    }else{
+      s_ini <- initial_seasonal_component(y=y, m=fq, type = s_type)
+
+      par_ini <- c(par_ini, 0.5, s_ini)
+      lower <- c(lower, 0.1, rep(-1e+10, fq))
+      upper <- c(upper, 0.99, rep(1e+10, fq))
+    }
+  }
+  #else{
+  #  par_ini <- c(par_ini, 0.0, rep(0.0, fq))
+  #  lower <- c(lower, -1e-10, rep(-1e-10, fq))
+  #  upper <- c(upper, 1e-10, rep(1e-10, fq))
+  #}
+
+  out =  seasonal_twoTL( y=y, h=h, level=level,
+                s_type=s_type, s_test=s_test, par_ini=par_ini,
+                estimation=estimation, lower=lower, upper=upper, opt.method=opt.method,
+                dynamic=TRUE, xreg=xreg, lambda=lambda, s=s)
+
+  out$method = "Dynamic Seasonal Optimised Theta Model"
+
+  return(out)
+}
+
+seasonal_dstm <- function(y, h=5, level=c(80,90,95),
+                 s_type="additive", #multiplicative
+                 s_test="default",
+                 lambda=NULL, par_ini=c(y[1]/2, 0.5, 2.0),estimation=TRUE,
+                 lower=c(-1e+10, 0.1, 1.99999), upper=c(1e+10, 0.99, 2.00001),
+                 opt.method="Nelder-Mead", xreg=NULL,
+                 s=NULL){
+
+  if(!is.ts(y)){ stop("ERROR in seasonal_dstm function: y must be an object of time series class."); }
+  if(!is.numeric(h)){	stop("ERROR in seasonal_dstm function: h must be a positive integer number.");}
+
+  # Conversion of deprecated argument to new arguments.
+  if(!is.null(s)){
+    if(is.logical(s)){
+      s_test = s
+    }else{
+      if (s == "additive"){
+        s_type = "additive"
+      }
+    }
+  }
+
+  fq <- frequency(y)
+
+  run_s_decomp = seasonal_test(y, s_test)
+  if( fq < 3 ){
+    s_type="None";s_type="None";
+  }
+
+  if( run_s_decomp ){
+
+    s_type = match.arg(arg=s_type, choices=c("additive","multiplicative","stl"))
+
+    if( s_type == "multiplicative" ){
+      s_ini <- initial_seasonal_component(y=y, m=fq, type = s_type)
+
+      par_ini <- c(par_ini, 0.5, s_ini)
+      lower <- c(lower, 0.1, rep(-1e+10, fq))
+      upper <- c(upper, 0.99, rep(1e+10, fq))
+    }else{
+      s_ini <- initial_seasonal_component(y=y, m=fq, type = s_type)
+
+      par_ini <- c(par_ini, 0.5, s_ini)
+      lower <- c(lower, 0.1, rep(-1e+10, fq))
+      upper <- c(upper, 0.99, rep(1e+10, fq))
+    }
+  }
+  #else{
+  #  par_ini <- c(par_ini, 0.0, rep(0.0, fq))
+  #  lower <- c(lower, -1e-10, rep(-1e-10, fq))
+  #  upper <- c(upper, 1e-10, rep(1e-10, fq))
+  #}
+
+  out =  seasonal_twoTL( y=y, h=h, level=level,
+                s_type=s_type, s_test=s_test, par_ini=par_ini,
+                estimation=estimation, lower=lower, upper=upper,
+                opt.method=opt.method, dynamic=TRUE, xreg=xreg, lambda=lambda, s=s)
+
+  out$method = "Dynamic Seasonal Standard Theta Model"
+  out$par = as.matrix(out$par[setdiff(rownames(out$par), "theta"), ])
+  colnames(out$par) = 'MLE'
+
+  return(out)
+}
+
+
+seasonal_otm <- function(y, h=5, level=c(80,90,95),
+                s_type="additive", #multiplicative
+                s_test="default",
+                lambda=NULL, par_ini=c(y[1]/2, 0.5, 2), estimation=TRUE,
+                lower=c(-1e+10, 0.1, 1.0), upper=c(1e+10, 0.99, 1e+10),
+                opt.method="Nelder-Mead", xreg=NULL, s=NULL){
+
+  if(!is.ts(y)){ stop("ERROR in seasonal_otm function: y must be an object of time series class."); }
+  if(!is.numeric(h)){	stop("ERROR in seasonal_otm function: h must be a positive integer number.");}
+
+  # Conversion of deprecated argument to new arguments.
+  if(!is.null(s)){
+    if(is.logical(s)){
+      s_test = s
+    }else{
+      if (s == "additive"){
+        s_type = "additive"
+      }
+    }
+  }
+
+  fq <- frequency(y)
+
+  run_s_decomp = seasonal_test(y, s_test)
+  if( fq < 3 ){
+    s_type="None";s_type="None";
+  }
+
+  if( run_s_decomp ){
+
+    s_type = match.arg(arg=s_type, choices=c("additive","multiplicative","stl"))
+
+    if( s_type == "multiplicative" ){
+      s_ini <- initial_seasonal_component(y=y, m=fq, type = s_type)
+
+      par_ini <- c(par_ini, 0.5, s_ini)
+      lower <- c(lower, 0.1, rep(-1e+10, fq))
+      upper <- c(upper, 0.99, rep(1e+10, fq))
+    }else{
+      s_ini <- initial_seasonal_component(y=y, m=fq, type = s_type)
+
+      par_ini <- c(par_ini, 0.5, s_ini)
+      lower <- c(lower, 0.1, rep(-1e+10, fq))
+      upper <- c(upper, 0.99, rep(1e+10, fq))
+    }
+  }
+  #else{
+  #  par_ini <- c(par_ini, 0.0, rep(0.0, fq))
+  #  lower <- c(lower, -1e-10, rep(-1e-10, fq))
+  #  upper <- c(upper, 1e-10, rep(1e-10, fq))
+  #}
+
+  out = seasonal_twoTL( y=y, h=h, level=level,
+               s_type=s_type, s_test=s_test,
+               par_ini=par_ini, estimation=estimation, lower=lower,
+               upper=upper, opt.method=opt.method, dynamic=FALSE, xreg=xreg,
+               lambda=lambda, s=s)
+
+  out$method = "Seasonal Optimised Theta Model"
+
+  return(out)
+}
+
+
+seasonal_stm <- function(y, h=5, level=c(80,90,95),
+                s_type="additive", #multiplicative
+                s_test="default",
+                lambda=NULL, par_ini=c(y[1]/2, 0.5, 2.0), estimation=TRUE,
+                lower=c(-1e+10, 0.1, 1.99999), upper=c(1e+10, 0.99, 2.00001),
+                opt.method="Nelder-Mead", xreg=NULL, s=NULL){
+
+  if(!is.ts(y)){ stop("ERROR in seasonal_stm function: y must be an object of time series class."); }
+  if(!is.numeric(h)){	stop("ERROR in seasonal_stm function: h must be a positive integer number.");}
+
+  # Conversion of deprecated argument to new arguments.
+  if(!is.null(s)){
+    if(is.logical(s)){
+      s_test = s
+    }else{
+      if (s == "additive"){
+        s_type = "additive"
+      }
+    }
+  }
+
+  fq <- frequency(y)
+
+  run_s_decomp = seasonal_test(y, s_test)
+  if( fq < 3 ){
+    s_type="None";s_type="None";
+  }
+
+  if( run_s_decomp ){
+
+    s_type = match.arg(arg=s_type, choices=c("additive","multiplicative","stl"))
+
+    if( s_type == "multiplicative" ){
+      s_ini <- initial_seasonal_component(y=y, m=fq, type = s_type)
+
+      par_ini <- c(par_ini, 0.5, s_ini)
+      lower <- c(lower, 0.1, rep(-1e+10, fq))
+      upper <- c(upper, 0.99, rep(1e+10, fq))
+    }else{
+      s_ini <- initial_seasonal_component(y=y, m=fq, type = s_type)
+
+      par_ini <- c(par_ini, 0.5, s_ini)
+      lower <- c(lower, 0.1, rep(-1e+10, fq))
+      upper <- c(upper, 0.99, rep(1e+10, fq))
+    }
+  }
+  #else{
+  #  par_ini <- c(par_ini, 0.0, rep(0.0, fq))
+  #  lower <- c(lower, -1e-10, rep(-1e-10, fq))
+  #  upper <- c(upper, 1e-10, rep(1e-10, fq))
+  #}
+
+  out = seasonal_twoTL( y=y, h=h, level=level,
+               s_type=s_type, s_test=s_test,
+               par_ini=par_ini, estimation=estimation,
+               lower=lower, upper=upper,
+               opt.method=opt.method, dynamic=FALSE, xreg=xreg, lambda=lambda,
+               s=s)
+
+  out$method = "Seasonal Standard Theta Model"
+  out$par = as.matrix(out$par[setdiff(rownames(out$par), "theta"), ])
+  colnames(out$par) = 'MLE'
+
+  return(out)
+}
 
 
 
@@ -640,6 +1497,10 @@ bagged_stm <- function(y, h=5, level=c(80,90,95),
 ################################################################################
 
 
+############ Bagged Seasonal Models ############################################
+
+
+################################################################################
 
 
 ###################  SES  ######################################################

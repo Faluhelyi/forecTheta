@@ -22,7 +22,9 @@ registerDoParallel(cl)
 
 # Carrega funções do pacote em cada nó
 clusterEvalQ(cl, devtools::load_all("."))
-clusterExport(cl, c("dotm", "dstm", "otm", "stm"))
+#clusterExport(cl, c("dotm", "dstm", "otm", "stm"))
+clusterExport(cl, c("seasonal_dotm", "seasonal_dstm", "seasonal_otm",
+                    "seasonal_stm"))
 
 # =====================
 # Execução dos modelos em paralelo
@@ -34,7 +36,8 @@ model_fits$dotm <- foreach(
 ) %dopar% {
   x <- M3[[i]]$x
   h <- M3[[i]]$h
-  dotm(y = x, h = h)
+  seasonal_dotm(y = x, h = h, s_type = "additive", s_test = "unit_root")
+  #dotm(y = x, h = h, s_type = "additive", s_test = "unit_root")
 }
 
 model_fits$dstm <- foreach(
@@ -42,7 +45,8 @@ model_fits$dstm <- foreach(
 ) %dopar% {
   x <- M3[[i]]$x
   h <- M3[[i]]$h
-  dstm(y = x, h = h)
+  seasonal_dstm(y = x, h = h, s_type = "additive", s_test = "unit_root")
+  #dstm(y = x, h = h, s_type = "additive", s_test = "unit_root")
 }
 
 model_fits$otm <- foreach(
@@ -50,7 +54,8 @@ model_fits$otm <- foreach(
 ) %dopar% {
   x <- M3[[i]]$x
   h <- M3[[i]]$h
-  otm(y = x, h = h)
+  seasonal_otm(y = x, h = h, s_type = "additive", s_test = "unit_root")
+  #otm(y = x, h = h, s_type = "additive", s_test = "unit_root")
 }
 
 model_fits$stm <- foreach(
@@ -58,7 +63,8 @@ model_fits$stm <- foreach(
 ) %dopar% {
   x <- M3[[i]]$x
   h <- M3[[i]]$h
-  stm(y = x, h = h)
+  seasonal_stm(y = x, h = h, s_type = "additive", s_test = "unit_root")
+  #stm(y = x, h = h, s_type = "additive", s_test = "unit_root")
 }
 
 stopCluster(cl)
@@ -112,10 +118,10 @@ calculate_errors <- function(outt, model_name) {
 
 # Aplicar para todos os modelos
 results_list <- list(
-  calculate_errors(model_fits$stm, "Standard Theta Model"),
-  calculate_errors(model_fits$otm, "Optimised Theta Model"),
-  calculate_errors(model_fits$dstm, "Dynamic Standard Theta Model"),
-  calculate_errors(model_fits$dotm, "Dynamic Optimised Theta Model")
+  calculate_errors(model_fits$stm, "Seasonal Standard Theta Model"),
+  calculate_errors(model_fits$otm, "Seasonal Optimised Theta Model"),
+  calculate_errors(model_fits$dstm, "Dynamic Seasonal Standard Theta Model"),
+  calculate_errors(model_fits$dotm, "Dynamic Seasonal Optimised Theta Model")
 )
 
 # Combinar resultados em um único data.frame
@@ -127,5 +133,5 @@ results <- do.call(rbind, results_list)
 print(results)
 
 # Opcional: salvar em CSV
-# write.csv(results, "benchmarks/resultados_theta.csv", row.names = FALSE)
+#write.csv(results, "benchmarks/resultados_theta_sazonal_additive.csv", row.names = FALSE)
 
