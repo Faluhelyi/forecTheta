@@ -10,4 +10,20 @@ variacao_percentual <- data.frame(
 
 print(variacao_percentual)
 
-#write.csv(variacao_percentual, "benchmarks/pct_change_additive.csv", row.names = FALSE)
+write.csv(variacao_percentual, "benchmarks/pct_change_additive.csv", row.names = FALSE)
+
+##########################################################################################################################################
+
+theta_multiplicative <- read.csv("benchmarks/resultados_theta_multiplicative.csv", stringsAsFactors = FALSE)
+theta_sazonal_multiplicative <- read.csv("benchmarks/resultados_theta_sazonal_multiplicative.csv", stringsAsFactors = FALSE)
+
+variacao_percentual <- data.frame(
+  Period = theta_sazonal_multiplicative$Period,
+  pct_change_sMAPE = round((theta_sazonal_multiplicative$sMAPE - theta_multiplicative$sMAPE) / theta_multiplicative$sMAPE * 100, 2),
+  pct_change_MASE  = round((theta_sazonal_multiplicative$MASE - theta_multiplicative$MASE) / theta_multiplicative$MASE * 100, 2),
+  Model = theta_sazonal_multiplicative$Model
+)
+
+print(variacao_percentual)
+
+write.csv(variacao_percentual, "benchmarks/pct_change_multiplicative.csv", row.names = FALSE)

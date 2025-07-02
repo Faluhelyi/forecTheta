@@ -36,36 +36,36 @@ model_fits$dotm <- foreach(
 ) %dopar% {
   x <- M3[[i]]$x
   h <- M3[[i]]$h
-  seasonal_dotm(y = x, h = h, s_type = "additive", s_test = "unit_root")
-  #dotm(y = x, h = h, s_type = "additive", s_test = "unit_root")
+  seasonal_dotm(y = x, h = h, s_type = "multiplicative", s_test = "unit_root")
+  #dotm(y = x, h = h, s_type = "multiplicative", s_test = "unit_root")
 }
 
-model_fits$dstm <- foreach(
-  i = 1:3003, .packages = c("forecast", "Mcomp")
-) %dopar% {
-  x <- M3[[i]]$x
-  h <- M3[[i]]$h
-  seasonal_dstm(y = x, h = h, s_type = "additive", s_test = "unit_root")
-  #dstm(y = x, h = h, s_type = "additive", s_test = "unit_root")
-}
+#model_fits$dstm <- foreach(
+#  i = 1:3003, .packages = c("forecast", "Mcomp")
+#) %dopar% {
+#  x <- M3[[i]]$x
+#  h <- M3[[i]]$h
+#  seasonal_dstm(y = x, h = h, s_type = "additive", s_test = "unit_root")
+#  #dstm(y = x, h = h, s_type = "additive", s_test = "unit_root")
+#}
 
 model_fits$otm <- foreach(
   i = 1:3003, .packages = c("forecast", "Mcomp")
 ) %dopar% {
   x <- M3[[i]]$x
   h <- M3[[i]]$h
-  seasonal_otm(y = x, h = h, s_type = "additive", s_test = "unit_root")
-  #otm(y = x, h = h, s_type = "additive", s_test = "unit_root")
+  seasonal_otm(y = x, h = h, s_type = "multiplicative", s_test = "unit_root")
+  #otm(y = x, h = h, s_type = "multiplicative", s_test = "unit_root")
 }
 
-model_fits$stm <- foreach(
-  i = 1:3003, .packages = c("forecast", "Mcomp")
-) %dopar% {
-  x <- M3[[i]]$x
-  h <- M3[[i]]$h
-  seasonal_stm(y = x, h = h, s_type = "additive", s_test = "unit_root")
-  #stm(y = x, h = h, s_type = "additive", s_test = "unit_root")
-}
+#model_fits$stm <- foreach(
+#  i = 1:3003, .packages = c("forecast", "Mcomp")
+#) %dopar% {
+#  x <- M3[[i]]$x
+#  h <- M3[[i]]$h
+#  seasonal_stm(y = x, h = h, s_type = "additive", s_test = "unit_root")
+#  #stm(y = x, h = h, s_type = "additive", s_test = "unit_root")
+#}
 
 stopCluster(cl)
 
@@ -118,10 +118,10 @@ calculate_errors <- function(outt, model_name) {
 
 # Aplicar para todos os modelos
 results_list <- list(
-  calculate_errors(model_fits$stm, "Seasonal Standard Theta Model"),
-  calculate_errors(model_fits$otm, "Seasonal Optimised Theta Model"),
-  calculate_errors(model_fits$dstm, "Dynamic Seasonal Standard Theta Model"),
-  calculate_errors(model_fits$dotm, "Dynamic Seasonal Optimised Theta Model")
+  #calculate_errors(model_fits$stm, "Seasonal Standard Theta Model"),
+  calculate_errors(model_fits$otm, "SOTM"),
+  #calculate_errors(model_fits$dstm, "Dynamic Seasonal Standard Theta Model"),
+  calculate_errors(model_fits$dotm, "Dynamic SOTM")
 )
 
 # Combinar resultados em um único data.frame
@@ -133,5 +133,5 @@ results <- do.call(rbind, results_list)
 print(results)
 
 # Opcional: salvar em CSV
-#write.csv(results, "benchmarks/resultados_theta_sazonal_additive.csv", row.names = FALSE)
+write.csv(results, "benchmarks/resultados_theta_sazonal_multiplicative.csv", row.names = FALSE)
 
