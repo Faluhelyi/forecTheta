@@ -26,6 +26,9 @@ clusterEvalQ(cl, devtools::load_all("."))
 clusterExport(cl, c("seasonal_dotm", "seasonal_dstm", "seasonal_otm",
                     "seasonal_stm"))
 
+#clusterExport(cl, c("bagged_seasonal_dotm", "bagged_seasonal_dstm",
+#                    "bagged_seasonal_otm", "bagged_seasonal_stm"))
+
 # =====================
 # Execução dos modelos em paralelo
 # =====================
@@ -36,8 +39,9 @@ model_fits$dotm <- foreach(
 ) %dopar% {
   x <- M3[[i]]$x
   h <- M3[[i]]$h
-  seasonal_dotm(y = x, h = h, s_type = "multiplicative", s_test = "unit_root")
-  #dotm(y = x, h = h, s_type = "multiplicative", s_test = "unit_root")
+  #bagged_seasonal_dotm(y = x, h = h)
+  seasonal_dotm(y = x, h = h)
+  #dotm(y = x, h = h)
 }
 
 #model_fits$dstm <- foreach(
@@ -54,8 +58,9 @@ model_fits$otm <- foreach(
 ) %dopar% {
   x <- M3[[i]]$x
   h <- M3[[i]]$h
-  seasonal_otm(y = x, h = h, s_type = "multiplicative", s_test = "unit_root")
-  #otm(y = x, h = h, s_type = "multiplicative", s_test = "unit_root")
+  #bagged_seasonal_otm(y = x, h = h, s_type = "multiplicative", s_test = "unit_root")
+  seasonal_otm(y = x, h = h)
+  #otm(y = x, h = h)
 }
 
 #model_fits$stm <- foreach(
