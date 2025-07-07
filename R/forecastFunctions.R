@@ -1274,15 +1274,15 @@ seasonal_otm <- function(y, h=5, level=c(80,90,95),
 }
 
 
-seasonal_stm <- function(y, h=5, level=c(80,90,95),
+seasonal_ThetaModel <- function(y, h=5, level=c(80,90,95),
                 s_type="multiplicative", #additive
                 s_test="default",
                 lambda=NULL, par_ini=c(y[1]/2, 0.5, 2.0), estimation=TRUE,
                 lower=c(-1e+10, 0.1, 1.99999), upper=c(1e+10, 0.99, 2.00001),
                 opt.method="Nelder-Mead", xreg=NULL, s=NULL){
 
-  if(!is.ts(y)){ stop("ERROR in seasonal_stm function: y must be an object of time series class."); }
-  if(!is.numeric(h)){	stop("ERROR in seasonal_stm function: h must be a positive integer number.");}
+  if(!is.ts(y)){ stop("ERROR in seasonal_ThetaModel function: y must be an object of time series class."); }
+  if(!is.numeric(h)){	stop("ERROR in seasonal_ThetaModel function: h must be a positive integer number.");}
 
   # Conversion of deprecated argument to new arguments.
   if(!is.null(s)){
@@ -1503,210 +1503,7 @@ bagged_stm <- function(y, h=5, level=c(80,90,95),
 
 ############ Bagged Seasonal Models ############################################
 
-bagged_seasonal_twoTL <- function(y, h, level,
-                         num_bootstrap = 1,   # number of bootstrap replication
-                         bs_bootstrap = NULL, # bootstrap block size
-                         s_type, ## s_type = c("additive","multiplicative","stl")
-                         s_test, ## s_test = c("default","unit_root",TRUE, FALSE)
-                         par_ini, estimation, lower, upper, opt.method, dynamic,
-                         xreg=NULL, s = NULL,
-                         lambda=NULL  ## parameter of Box-Cox transformation
-)
-{
-  if(!is.ts(y)){ stop("ERROR in bagged_seasonal_twoTL function: y must be an object of time series class."); }
-  if(!is.numeric(h)){	stop("ERROR in bagged_seasonal_twoTL function: h must be a positive integer number.");}
-
-  # Conversion of deprecated argument to new arguments.
-  if(!is.null(s)){
-    if(is.logical(s)){
-      s_test = s
-    }else{
-      if (s == "additive"){
-        s_type = "additive"
-      }
-    }
-  }
-
-  fq <- frequency(y)
-
-  run_s_decomp = seasonal_test(y, s_test)
-  if( fq < 3 ){
-    s_type="None";s_type="None";
-  }
-
-  if( run_s_decomp ){
-
-    s_type = match.arg(arg=s_type, choices=c("additive","multiplicative","stl"))
-
-    if( s_type == "multiplicative" ){
-      s_ini <- initial_seasonal_component(y=y, m=fq, type = s_type)
-
-      par_ini <- c(par_ini, 0.5, s_ini)
-      lower <- c(lower, 0.1, rep(-1e+10, fq))
-      upper <- c(upper, 0.99, rep(1e+10, fq))
-    }else{
-      s_ini <- initial_seasonal_component(y=y, m=fq, type = s_type)
-
-      par_ini <- c(par_ini, 0.5, s_ini)
-      lower <- c(lower, 0.1, rep(-1e+10, fq))
-      upper <- c(upper, 0.99, rep(1e+10, fq))
-    }
-  }
-  #else{
-  #  par_ini <- c(par_ini, 0.0, rep(0.0, fq))
-  #  lower <- c(lower, -1e-10, rep(-1e-10, fq))
-  #  upper <- c(upper, 1e-10, rep(1e-10, fq))
-  #}
-
-  nSample = 10000
-  y_bagged = list(y)
-  if(num_bootstrap > 1 ){
-    y_bagged = bld.mbb.bootstrap(y, num=num_bootstrap)
-    nSample = max( nSample %/% num_bootstrap, 1)
-  }
-
-  if(num_bootstrap>1 && is.null(level)){level=c(80,90,95);} ## important for running bagging
-
-  y_i = NULL
-  models = foreach(y_i = y_bagged) %do% {
-
-    fit = seasonal_twoTL(y=y_i, h=h, level=level, s_type=s_type, s_test=s_test,
-                par_ini=par_ini, estimation=estimation, lower=lower, upper=upper,
-                opt.method=opt.method, dynamic=dynamic, xreg=xreg, lambda=lambda,
-                nSample=nSample)
-
-    fit
-  }
-
-  out = models[[1]]
-  out$num_bootstrap = num_bootstrap
-
-  if( num_bootstrap == 1 ){
-    out$matForec.sample = NULL
-    return(out);
-  }
-
-  # bs_means = foreach(fit = models, .combine=cbind) %do% { fit$mean; }
-  # colnames(bs_means) = paste0("m", 1:ncol(bs_means) )
-  # bs_means_mean = ts(rowMeans(bs_means), start=start(bs_means), frequency = frequency(y))
-  # bs_means_median = apply(X=bs_means, MARGIN=1, FUN=quantile,  probs=0.5)
-  # bs_means_median = ts(bs_means_median, start=start(bs_means), frequency = frequency(y))
-  # out$bs_means_mean = bs_means_mean
-  # out$bs_means_median = bs_means_median
-
-  bs_strapolations = foreach(fit = models, .combine=cbind) %do% { fit$matForec.sample; }
-  colnames(bs_strapolations) = paste0("m", 1:ncol(bs_strapolations) )
-  bs_st_mean = ts(rowMeans(bs_strapolations), start=start(out$mean), frequency = frequency(y))
-  bs_st_median = apply(X=bs_strapolations, MARGIN=1, FUN=quantile,  probs=0.5)
-  bs_st_median = ts(bs_st_median, start=start(out$mean), frequency = frequency(y))
-
-  out$mean = bs_st_mean
-  out$median =  bs_st_median
-
-  quantiles = bootstrap_quantiles( bs_series=bs_strapolations, level=level )
-  quantiles = ts( quantiles, start = end(y) + c(0, 1), frequency = frequency(y))
-  nn = length(level)
-  out$lower = quantiles[, 2*(1:nn)-1, drop=F]
-  out$upper = quantiles[, 2*(1:nn), drop=F]
-
-  out$matForec.sample = NULL
-  out$tests = NULL
-
-  return(out)
-}
-
-
-
-
-bagged_seasonal_dotm <- function(y, h=5, level=c(80,90,95),
-                        num_bootstrap = 100,   # number of bootstrap replication
-                        bs_bootstrap = NULL, # bootstrap block size
-                        s_type="multiplicative",
-                        s_test="default",
-                        lambda=NULL, par_ini=c(y[1]/2, 0.5, 2), estimation=TRUE,
-                        lower=c(-1e+10, 0.1, 1.0), upper=c(1e+10, 0.99, 1e+10),
-                        opt.method="Nelder-Mead", xreg=NULL, s = NULL ){
-
-  out =  bagged_seasonal_twoTL( y=y, h=h, level=level,
-                       num_bootstrap = num_bootstrap, bs_bootstrap = bs_bootstrap,
-                       s_type=s_type, s_test=s_test, par_ini=par_ini,
-                       estimation=estimation, lower=lower, upper=upper, opt.method=opt.method,
-                       dynamic=TRUE, xreg=xreg, lambda=lambda)
-
-  out$method = "Dynamic Seasonal Optimised Theta Model"
-  if(out$num_bootstrap > 1){ out$method = paste("Bagged", out$method); }
-
-  return(out)
-}
-
-bagged_seasonal_dstm <- function(y, h=5, level=c(80,90,95),
-                        num_bootstrap = 100,   # number of bootstrap replication
-                        bs_bootstrap = NULL, # bootstrap block size
-                        s_type="multiplicative", s_test="default",
-                        lambda=NULL, par_ini=c(y[1]/2, 0.5, 2.0),estimation=TRUE,
-                        lower=c(-1e+10, 0.1, 1.99999), upper=c(1e+10, 0.99, 2.00001),
-                        opt.method="Nelder-Mead", xreg=NULL, s = NULL ){
-
-  out =  bagged_seasonal_twoTL( y=y, h=h, level=level,
-                       num_bootstrap = num_bootstrap, bs_bootstrap = bs_bootstrap,
-                       s_type=s_type, s_test=s_test, par_ini=par_ini,
-                       estimation=estimation, lower=lower, upper=upper,
-                       opt.method=opt.method, dynamic=TRUE, xreg=xreg, lambda=lambda)
-
-  out$method = "Dynamic Seasonal Standard Theta Model"
-  if(out$num_bootstrap > 1){ out$method = paste("Bagged", out$method); }
-  out$par = as.matrix(out$par[setdiff(rownames(out$par), "theta"), ])
-  colnames(out$par) = 'MLE'
-
-  return(out)
-}
-
-
-bagged_seasonal_otm <- function(y, h=5, level=c(80,90,95),
-                       num_bootstrap = 100,   # number of bootstrap replication
-                       bs_bootstrap = NULL, # bootstrap block size
-                       s_type="multiplicative", s_test="default",
-                       lambda=NULL, par_ini=c(y[1]/2, 0.5, 2.0), estimation=TRUE,
-                       lower=c(-1e+10, 0.1, 1.0), upper=c(1e+10, 0.99, 1e+10),
-                       opt.method="Nelder-Mead", xreg=NULL, s = NULL ){
-
-  out = bagged_seasonal_twoTL( y=y, h=h, level=level,
-                      num_bootstrap = num_bootstrap, bs_bootstrap = bs_bootstrap,
-                      s_type=s_type, s_test=s_test,
-                      par_ini=par_ini, estimation=estimation, lower=lower,
-                      upper=upper, opt.method=opt.method, dynamic=FALSE, xreg=xreg,
-                      lambda=lambda)
-
-  out$method = "Seasonal Optimised Theta Model"
-  if(out$num_bootstrap > 1){ out$method = paste("Bagged", out$method); }
-
-  return(out)
-}
-
-bagged_seasonal_stm <- function(y, h=5, level=c(80,90,95),
-                       num_bootstrap = 100,   # number of bootstrap replication
-                       bs_bootstrap = NULL, # bootstrap block size
-                       s_type="multiplicative", s_test="default",
-                       lambda=NULL, par_ini=c(y[1]/2, 0.5, 2.0), estimation=TRUE,
-                       lower=c(-1e+10, 0.1, 1.99999), upper=c(1e+10, 0.99, 2.00001),
-                       opt.method="Nelder-Mead", xreg=NULL, s = NULL ){
-
-  out = bagged_seasonal_twoTL( y=y, h=h, level=level,
-                      num_bootstrap = num_bootstrap, bs_bootstrap = bs_bootstrap,
-                      s_type=s_type, s_test=s_test,
-                      par_ini=par_ini, estimation=estimation,
-                      lower=lower, upper=upper,
-                      opt.method=opt.method, dynamic=FALSE, xreg=xreg, lambda=lambda)
-
-  out$method = "Seasonal Standard Theta Model"
-  if(out$num_bootstrap > 1){ out$method = paste("Bagged", out$method); }
-  out$par = as.matrix(out$par[setdiff(rownames(out$par), "theta"), ])
-  colnames(out$par) = 'MLE'
-
-  return(out)
-}
-
-
+######################################################
 
 ###################  SES  ######################################################
 expSmoot <- function(y, h=5, ell0=NULL, alpha=NULL, lower = c(-1e+10, 0.1),
