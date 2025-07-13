@@ -11,13 +11,21 @@ data(M3)
 
 inicio = Sys.time()
 
-cl <- makeCluster(detectCores(logical = FALSE))
+cl <- makeCluster(detectCores(logical = TRUE))
 registerDoParallel(cl)
 
 out = foreach(i = 1:3003, .packages = c("forecast", "forecTheta")) %dopar% {
   x = M3[[i]]$x
   h = M3[[i]]$h
-  f = seasonal_ThetaModel(y = x, h = h)
+
+  f = tryCatch(
+    {
+      seasonal_dotm(y = x, h = h, s_type="additive") #s_type="additive"
+    },
+    error = function(e) {
+      seasonal_dotm(y = x, h = h, s_type="additive")
+    }
+  )
   f
 }
 
